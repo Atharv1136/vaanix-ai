@@ -14,7 +14,220 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      app_settings: {
+        Row: {
+          business_days: string
+          business_hours_end: string
+          business_hours_start: string
+          default_greeting: string
+          id: number
+          org_name: string
+        }
+        Insert: {
+          business_days?: string
+          business_hours_end?: string
+          business_hours_start?: string
+          default_greeting?: string
+          id?: number
+          org_name?: string
+        }
+        Update: {
+          business_days?: string
+          business_hours_end?: string
+          business_hours_start?: string
+          default_greeting?: string
+          id?: number
+          org_name?: string
+        }
+        Relationships: []
+      }
+      call_lines: {
+        Row: {
+          ai_enabled: boolean
+          forward_to: string | null
+          id: string
+          label: string
+          phone_number: string
+          updated_at: string
+        }
+        Insert: {
+          ai_enabled?: boolean
+          forward_to?: string | null
+          id?: string
+          label: string
+          phone_number: string
+          updated_at?: string
+        }
+        Update: {
+          ai_enabled?: boolean
+          forward_to?: string | null
+          id?: string
+          label?: string
+          phone_number?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      call_transcripts: {
+        Row: {
+          call_id: string
+          id: string
+          speaker: string
+          text: string
+          ts: string
+          turn_index: number
+        }
+        Insert: {
+          call_id: string
+          id?: string
+          speaker: string
+          text: string
+          ts?: string
+          turn_index: number
+        }
+        Update: {
+          call_id?: string
+          id?: string
+          speaker?: string
+          text?: string
+          ts?: string
+          turn_index?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "call_transcripts_call_id_fkey"
+            columns: ["call_id"]
+            isOneToOne: false
+            referencedRelation: "calls"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      calls: {
+        Row: {
+          direction: string
+          duration_seconds: number
+          ended_at: string | null
+          flagged: boolean
+          id: string
+          line_id: string | null
+          outcome: string
+          started_at: string
+          student_number: string
+          summary: string | null
+        }
+        Insert: {
+          direction?: string
+          duration_seconds?: number
+          ended_at?: string | null
+          flagged?: boolean
+          id?: string
+          line_id?: string | null
+          outcome?: string
+          started_at?: string
+          student_number: string
+          summary?: string | null
+        }
+        Update: {
+          direction?: string
+          duration_seconds?: number
+          ended_at?: string | null
+          flagged?: boolean
+          id?: string
+          line_id?: string | null
+          outcome?: string
+          started_at?: string
+          student_number?: string
+          summary?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calls_line_id_fkey"
+            columns: ["line_id"]
+            isOneToOne: false
+            referencedRelation: "call_lines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      common_queries: {
+        Row: {
+          count: number
+          id: string
+          last_asked_at: string
+          question_text: string
+        }
+        Insert: {
+          count?: number
+          id?: string
+          last_asked_at?: string
+          question_text: string
+        }
+        Update: {
+          count?: number
+          id?: string
+          last_asked_at?: string
+          question_text?: string
+        }
+        Relationships: []
+      }
+      kb_sections: {
+        Row: {
+          category: string
+          content: string
+          created_at: string
+          id: string
+          title: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          category: string
+          content?: string
+          created_at?: string
+          id?: string
+          title: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          category?: string
+          content?: string
+          created_at?: string
+          id?: string
+          title?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
+      staff: {
+        Row: {
+          created_at: string
+          email: string
+          full_name: string
+          id: string
+          role: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          full_name: string
+          id?: string
+          role?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          full_name?: string
+          id?: string
+          role?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
