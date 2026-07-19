@@ -1,9 +1,43 @@
-import type { WebSocket } from "ws";
+import { WebSocket } from "ws";
 import { createDeepgramStream } from "../deepgram";
-import { getClaudeReplyStream } from "../claude";
+import { getAIReplyStream } from "../nvidia";
 import { getElevenLabsVoiceStream, linearPCMToMulaw } from "../elevenlabs";
-import { getKnowledgeBase, saveCallTranscriptTurn, updateCallStatus, incrementCommonQuery } from "../supabase";
-import { redirectCallToStaff } from "../twilioClient";
+import { 
+  getAssistant, 
+  getAssistantTools, 
+  saveCallTranscriptTurn, 
+  updateCallStatus, 
+  Assistant,
+  Tool
+} from "../supabase";
+
+const transcriptionClients = new Map<string, Set<WebSocket>>();
+
+export function addTranscriptionClient(callId: string, ws: WebSocket) {
+  if (!transcriptionClients.has(callId)) {
+    transcriptionClients.set(callId, new Set());
+  }
+  transcriptionClients.get(callId)!.add(ws);
+
+  ws.on("close", () => {
+    transcriptionClients.get(callId)?.delete(ws);
+    if (transcriptionClients.get(callId)?.size === 0) {
+      transcriptionClients.delete(callId);
+    }
+  });
+}
+
+function broadcastTranscription(callId: string, speaker: "caller" | "ai" | "tool", text: string, isFinal: boolean = true) {
+  const clients = transcriptionClients.get(callId);
+  if (clients) {
+    const message = JSON.stringify({ type: "transcription", speaker, text, isFinal, timestamp: new Date().toISOString() });
+    clients.forEach(ws => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(message);
+      }
+    });
+  }
+}
 
 interface TwilioMediaPayload {
   event: "start" | "media" | "stop";
@@ -28,18 +62,18 @@ export function handleMediaStream(ws: WebSocket) {
   let callSid = "";
   let streamSid = "";
   let deepgramStream: any = null;
-  let conversationHistory: { speaker: "student" | "ai"; text: string }[] = [];
-  let knowledgeBase: any[] = [];
+  // History allows complex tool_calls in nvidia.ts, so we'll maintain a full state here.
+  let conversationHistory: any[] = [];
   let turnIndex = 0;
   let callStartTime = Date.now();
   let callEnded = false;
-  let lineForwardNumber = "";
+  let loggedFirstMedia = false;
+  
+  let assistant: Assistant | null = null;
+  let tools: Tool[] = [];
 
   const handleFailover = async (err: any) => {
     console.error(`[MediaStream] Orchestrator error occurred for call ${callSid}:`, err);
-    if (callSid && lineForwardNumber) {
-      await redirectCallToStaff(callSid, lineForwardNumber);
-    }
     cleanup();
   };
 
@@ -48,14 +82,10 @@ export function handleMediaStream(ws: WebSocket) {
     callEnded = true;
     console.log(`[MediaStream] Cleaning up connections for call ${callSid}`);
     
-    // Close Deepgram
     if (deepgramStream) {
-      try {
-        deepgramStream.finish();
-      } catch (e) {}
+      try { deepgramStream.close(); } catch (e) {}
     }
 
-    // Save final status to DB
     if (callSid) {
       const durationSeconds = Math.round((Date.now() - callStartTime) / 1000);
       updateCallStatus(callSid, durationSeconds, "resolved");
@@ -72,80 +102,121 @@ export function handleMediaStream(ws: WebSocket) {
         callSid = data.start.callSid;
         streamSid = data.start.streamSid;
         
-        // Grab custom parameters sent from webhook
-        lineForwardNumber = data.start.customParameters?.forward_to || "";
+        const assistantId = data.start.customParameters?.assistant_id;
         const callRecordId = data.start.customParameters?.call_record_id || callSid;
-        if (callRecordId) {
-          callSid = callRecordId; // Bind call record ID to track
-        }
+        if (callRecordId) callSid = callRecordId;
 
         console.log(`[MediaStream] Started stream ${streamSid} for Call ${callSid.substring(0, 8)}...`);
 
-        // Fetch Knowledge Base
-        knowledgeBase = await getKnowledgeBase();
+        if (!assistantId) {
+          console.error("[MediaStream] No assistant_id passed in customParameters.");
+          cleanup();
+          return;
+        }
 
-        // 8 minute timeout limit to prevent hanging connections
+        // Fetch Assistant and Tools
+        assistant = await getAssistant(assistantId);
+        if (!assistant) {
+          console.error(`[MediaStream] Assistant ${assistantId} not found.`);
+          cleanup();
+          return;
+        }
+
+        tools = await getAssistantTools(assistantId);
+        
+        // Push initial first message if it exists
+        if (assistant.first_message) {
+           conversationHistory.push({ speaker: "ai", text: assistant.first_message });
+           
+           const firstMsg = assistant.first_message;
+           const voiceId = assistant.voice_id;
+           setTimeout(async () => {
+             try {
+               console.log(`[AI] Speaking first message: "${firstMsg}"`);
+               await saveCallTranscriptTurn(callSid, "ai", firstMsg, turnIndex++);
+               broadcastTranscription(callSid, "ai", firstMsg);
+
+               const pcmBuffer = await getElevenLabsVoiceStream(firstMsg, voiceId);
+               const mulawBuffer = linearPCMToMulaw(pcmBuffer);
+               const base64Audio = mulawBuffer.toString("base64");
+
+               if (!callEnded) {
+                 ws.send(
+                   JSON.stringify({
+                     event: "media",
+                     streamSid: streamSid,
+                     media: {
+                       payload: base64Audio,
+                     },
+                   })
+                 );
+               }
+             } catch (err) {
+               console.error("[MediaStream] Error playing first message:", err);
+             }
+           }, 1000);
+        }
+
         setTimeout(() => {
           console.log(`[MediaStream] Call ${callSid} exceeded 8 minutes. Graceful termination.`);
           cleanup();
         }, 8 * 60 * 1000);
 
         // Start Deepgram Stream
-        deepgramStream = createDeepgramStream(
+        deepgramStream = await createDeepgramStream(
           async (text: string) => {
-            if (callEnded) return;
-            console.log(`[Student] Says: "${text}"`);
+            if (callEnded || !assistant) return;
+            console.log(`[Caller] Says: "${text}"`);
             
-            // Log Student Turn
-            await saveCallTranscriptTurn(callSid, "student", text, turnIndex++);
-            conversationHistory.push({ speaker: "student", text });
-            
-            // Check for exit / transfer keywords immediately to skip Claude
-            const transferKeywords = ["human", "person", "staff", "operator", "talk to someone", "representative"];
-            const wantsTransfer = transferKeywords.some((kw) => text.toLowerCase().includes(kw));
+            await saveCallTranscriptTurn(callSid, "caller", text, turnIndex++);
+            conversationHistory.push({ speaker: "caller", text });
+            broadcastTranscription(callSid, "caller", text);
 
-            if (wantsTransfer) {
-              console.log("[MediaStream] Student requested human transfer. Redirecting...");
-              await handleFailover("User requested human transfer");
-              return;
-            }
-
-            // Trigger Claude Brain reply
             try {
               let fullReplyText = "";
-              const replyGenerator = getClaudeReplyStream(conversationHistory, knowledgeBase);
+              const replyGenerator = getAIReplyStream(assistant, tools, conversationHistory);
               
               for await (const chunk of replyGenerator) {
                 fullReplyText += chunk;
               }
+              
+              // We only broadcast text for now, but conversationHistory has tool usage recorded 
+              // inside getAIReplyStream because we passed it by reference!
 
-              console.log(`[AI Counselor] Says: "${fullReplyText}"`);
+              if (fullReplyText) {
+                 console.log(`[AI] Says: "${fullReplyText}"`);
+                 await saveCallTranscriptTurn(callSid, "ai", fullReplyText, turnIndex++);
+                 broadcastTranscription(callSid, "ai", fullReplyText);
 
-              // Log AI Turn
-              await saveCallTranscriptTurn(callSid, "ai", fullReplyText, turnIndex++);
-              conversationHistory.push({ speaker: "ai", text: fullReplyText });
+                 const pcmBuffer = await getElevenLabsVoiceStream(fullReplyText, assistant.voice_id);
+                 const mulawBuffer = linearPCMToMulaw(pcmBuffer);
+                 const base64Audio = mulawBuffer.toString("base64");
 
-              // Check if Claude requested transfer
-              if (fullReplyText.includes("forward you to our admissions officer")) {
-                await handleFailover("Claude requested transfer");
-                return;
+                 ws.send(
+                   JSON.stringify({
+                     event: "media",
+                     streamSid: streamSid,
+                     media: {
+                       payload: base64Audio,
+                     },
+                   })
+                 );
+              }
+              
+              // If last turn has tool results that say "transfer_call" or "end_call", process them
+              const lastTurn = conversationHistory[conversationHistory.length - 1];
+              if (lastTurn && lastTurn.speaker === "tool" && lastTurn.tool_results) {
+                 for (const tr of lastTurn.tool_results) {
+                    if (tr.content.includes("transfer_call")) {
+                       // Future: execute twilio REST API redirect
+                       console.log("[MediaStream] Tool requested transfer.");
+                    } else if (tr.content.includes("end_call")) {
+                       console.log("[MediaStream] Tool requested end call.");
+                       cleanup();
+                    }
+                 }
               }
 
-              // Get TTS Voice Audio
-              const pcmBuffer = await getElevenLabsVoiceStream(fullReplyText);
-              const mulawBuffer = linearPCMToMulaw(pcmBuffer);
-              const base64Audio = mulawBuffer.toString("base64");
-
-              // Send audio frame to Twilio
-              ws.send(
-                JSON.stringify({
-                  event: "media",
-                  streamSid: streamSid,
-                  media: {
-                    payload: base64Audio,
-                  },
-                })
-              );
             } catch (err) {
               await handleFailover(err);
             }
@@ -157,20 +228,18 @@ export function handleMediaStream(ws: WebSocket) {
       }
 
       if (data.event === "media" && data.media) {
-        if (deepgramStream && deepgramStream.getReadyState() === 1) {
+        if (!loggedFirstMedia) {
+          console.log(`[MediaStream] Received first media chunk from Twilio. readyState=${deepgramStream?.readyState}`);
+          loggedFirstMedia = true;
+        }
+        if (deepgramStream && deepgramStream.readyState === 1) {
           const rawAudioBuffer = Buffer.from(data.media.payload, "base64");
-          deepgramStream.send(rawAudioBuffer);
+          deepgramStream.sendMedia(rawAudioBuffer);
         }
       }
 
       if (data.event === "stop") {
         console.log(`[MediaStream] Stopped stream for call ${callSid}`);
-        // Run quick query increment on final transcript statements
-        const studentTurns = conversationHistory.filter(h => h.speaker === "student");
-        if (studentTurns.length > 0) {
-          const lastQuestion = studentTurns[studentTurns.length - 1].text;
-          await incrementCommonQuery(lastQuestion);
-        }
         cleanup();
       }
     } catch (error) {

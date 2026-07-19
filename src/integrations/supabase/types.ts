@@ -7,91 +7,223 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
-      app_settings: {
+      assistants: {
         Row: {
-          business_days: string
-          business_hours_end: string
-          business_hours_start: string
-          default_greeting: string
-          id: number
-          org_name: string
+          id: string
+          name: string
+          system_prompt: string
+          first_message: string | null
+          model: string
+          voice_provider: string
+          voice_id: string
+          created_at: string
+          updated_at: string
+          is_published: boolean
         }
         Insert: {
-          business_days?: string
-          business_hours_end?: string
-          business_hours_start?: string
-          default_greeting?: string
-          id?: number
-          org_name?: string
+          id?: string
+          name: string
+          system_prompt: string
+          first_message?: string | null
+          model?: string
+          voice_provider?: string
+          voice_id?: string
+          created_at?: string
+          updated_at?: string
+          is_published?: boolean
         }
         Update: {
-          business_days?: string
-          business_hours_end?: string
-          business_hours_start?: string
-          default_greeting?: string
-          id?: number
-          org_name?: string
+          id?: string
+          name?: string
+          system_prompt?: string
+          first_message?: string | null
+          model?: string
+          voice_provider?: string
+          voice_id?: string
+          created_at?: string
+          updated_at?: string
+          is_published?: boolean
         }
         Relationships: []
       }
-      call_lines: {
+      tools: {
         Row: {
-          ai_enabled: boolean
-          forward_to: string | null
           id: string
-          label: string
-          phone_number: string
-          updated_at: string
+          name: string
+          description: string | null
+          tool_type: string
+          config_json: Json | null
         }
         Insert: {
-          ai_enabled?: boolean
-          forward_to?: string | null
           id?: string
-          label: string
-          phone_number: string
-          updated_at?: string
+          name: string
+          description?: string | null
+          tool_type: string
+          config_json?: Json | null
         }
         Update: {
-          ai_enabled?: boolean
-          forward_to?: string | null
           id?: string
-          label?: string
-          phone_number?: string
-          updated_at?: string
+          name?: string
+          description?: string | null
+          tool_type?: string
+          config_json?: Json | null
         }
         Relationships: []
+      }
+      assistant_tools: {
+        Row: {
+          id: string
+          assistant_id: string
+          tool_id: string
+          enabled: boolean
+        }
+        Insert: {
+          id?: string
+          assistant_id: string
+          tool_id: string
+          enabled?: boolean
+        }
+        Update: {
+          id?: string
+          assistant_id?: string
+          tool_id?: string
+          enabled?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assistant_tools_assistant_id_fkey"
+            columns: ["assistant_id"]
+            isOneToOne: false
+            referencedRelation: "assistants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assistant_tools_tool_id_fkey"
+            columns: ["tool_id"]
+            isOneToOne: false
+            referencedRelation: "tools"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      phone_numbers: {
+        Row: {
+          id: string
+          twilio_sid: string | null
+          phone_number: string
+          assistant_id: string | null
+          label: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          twilio_sid?: string | null
+          phone_number: string
+          assistant_id?: string | null
+          label: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          twilio_sid?: string | null
+          phone_number?: string
+          assistant_id?: string | null
+          label?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "phone_numbers_assistant_id_fkey"
+            columns: ["assistant_id"]
+            isOneToOne: false
+            referencedRelation: "assistants"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      calls: {
+        Row: {
+          id: string
+          assistant_id: string | null
+          phone_number_id: string | null
+          direction: string
+          student_or_caller_number: string
+          started_at: string
+          ended_at: string | null
+          duration_seconds: number
+          outcome: string
+          cost_estimate: number | null
+        }
+        Insert: {
+          id?: string
+          assistant_id?: string | null
+          phone_number_id?: string | null
+          direction?: string
+          student_or_caller_number: string
+          started_at?: string
+          ended_at?: string | null
+          duration_seconds?: number
+          outcome?: string
+          cost_estimate?: number | null
+        }
+        Update: {
+          id?: string
+          assistant_id?: string | null
+          phone_number_id?: string | null
+          direction?: string
+          student_or_caller_number?: string
+          started_at?: string
+          ended_at?: string | null
+          duration_seconds?: number
+          outcome?: string
+          cost_estimate?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calls_assistant_id_fkey"
+            columns: ["assistant_id"]
+            isOneToOne: false
+            referencedRelation: "assistants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calls_phone_number_id_fkey"
+            columns: ["phone_number_id"]
+            isOneToOne: false
+            referencedRelation: "phone_numbers"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       call_transcripts: {
         Row: {
-          call_id: string
           id: string
+          call_id: string
+          turn_index: number
           speaker: string
           text: string
-          ts: string
-          turn_index: number
+          timestamp: string
         }
         Insert: {
-          call_id: string
           id?: string
+          call_id: string
+          turn_index: number
           speaker: string
           text: string
-          ts?: string
-          turn_index: number
+          timestamp?: string
         }
         Update: {
-          call_id?: string
           id?: string
+          call_id?: string
+          turn_index?: number
           speaker?: string
           text?: string
-          ts?: string
-          turn_index?: number
+          timestamp?: string
         }
         Relationships: [
           {
@@ -100,104 +232,65 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "calls"
             referencedColumns: ["id"]
-          },
+          }
         ]
       }
-      calls: {
+      kb_documents: {
         Row: {
-          direction: string
-          duration_seconds: number
-          ended_at: string | null
-          flagged: boolean
           id: string
-          line_id: string | null
-          outcome: string
-          started_at: string
-          student_number: string
-          summary: string | null
+          tool_id: string
+          title: string
+          content: string
+          created_at: string
+          updated_at: string
         }
         Insert: {
-          direction?: string
-          duration_seconds?: number
-          ended_at?: string | null
-          flagged?: boolean
           id?: string
-          line_id?: string | null
-          outcome?: string
-          started_at?: string
-          student_number: string
-          summary?: string | null
+          tool_id: string
+          title: string
+          content: string
+          created_at?: string
+          updated_at?: string
         }
         Update: {
-          direction?: string
-          duration_seconds?: number
-          ended_at?: string | null
-          flagged?: boolean
           id?: string
-          line_id?: string | null
-          outcome?: string
-          started_at?: string
-          student_number?: string
-          summary?: string | null
+          tool_id?: string
+          title?: string
+          content?: string
+          created_at?: string
+          updated_at?: string
         }
         Relationships: [
           {
-            foreignKeyName: "calls_line_id_fkey"
-            columns: ["line_id"]
+            foreignKeyName: "kb_documents_tool_id_fkey"
+            columns: ["tool_id"]
             isOneToOne: false
-            referencedRelation: "call_lines"
+            referencedRelation: "tools"
             referencedColumns: ["id"]
-          },
+          }
         ]
       }
-      common_queries: {
+      api_keys: {
         Row: {
-          count: number
           id: string
-          last_asked_at: string
-          question_text: string
-        }
-        Insert: {
-          count?: number
-          id?: string
-          last_asked_at?: string
-          question_text: string
-        }
-        Update: {
-          count?: number
-          id?: string
-          last_asked_at?: string
-          question_text?: string
-        }
-        Relationships: []
-      }
-      kb_sections: {
-        Row: {
-          category: string
-          content: string
+          key_hash: string
+          label: string
           created_at: string
-          id: string
-          title: string
-          updated_at: string
-          updated_by: string | null
+          last_used_at: string | null
         }
         Insert: {
-          category: string
-          content?: string
-          created_at?: string
           id?: string
-          title: string
-          updated_at?: string
-          updated_by?: string | null
+          key_hash: string
+          label: string
+          created_at?: string
+          last_used_at?: string | null
         }
         Update: {
-          category?: string
-          content?: string
-          created_at?: string
           id?: string
-          title?: string
-          updated_at?: string
-          updated_by?: string | null
+          key_hash?: string
+          label?: string
+          created_at?: string
+          last_used_at?: string | null
         }
         Relationships: []
       }
@@ -360,9 +453,3 @@ export type CompositeTypes<
   : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
     ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
     : never
-
-export const Constants = {
-  public: {
-    Enums: {},
-  },
-} as const

@@ -28,17 +28,17 @@ function Logs() {
     queryFn: async () => {
       let query = supabase
         .from("calls")
-        .select("id, student_number, started_at, duration_seconds, outcome, flagged, line_id, call_lines(label)")
+        .select("id, student_or_caller_number, started_at, duration_seconds, outcome, assistant_id, assistants(name)")
         .order("started_at", { ascending: false })
         .limit(200);
-      if (flaggedOnly) query = query.eq("flagged", true);
+      if (flaggedOnly) query = query.eq("outcome", "flagged");
       const { data, error } = await query;
       if (error) throw error;
       return data ?? [];
     },
   });
 
-  const filtered = rows.filter((r) => r.student_number.includes(q));
+  const filtered = rows.filter((r: any) => r.student_or_caller_number?.includes(q));
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -60,7 +60,7 @@ function Logs() {
           <thead className="border-b border-border bg-muted/30 text-left text-xs uppercase tracking-wide text-muted-foreground">
             <tr>
               <th className="px-4 py-2.5 font-medium">Time</th>
-              <th className="px-4 py-2.5 font-medium">Line</th>
+              <th className="px-4 py-2.5 font-medium">Assistant</th>
               <th className="px-4 py-2.5 font-medium">Student</th>
               <th className="px-4 py-2.5 font-medium">Duration</th>
               <th className="px-4 py-2.5 font-medium">Outcome</th>
@@ -87,11 +87,11 @@ function Logs() {
               >
                 <td className="px-4 py-2.5 text-foreground">{new Date(c.started_at).toLocaleString()}</td>
                 <td className="px-4 py-2.5 text-muted-foreground">
-                  {(c.call_lines as { label?: string } | null)?.label ?? "—"}
+                  {(c.assistants as { name?: string } | null)?.name ?? "—"}
                 </td>
-                <td className="px-4 py-2.5 text-foreground">{c.student_number}</td>
-                <td className="px-4 py-2.5 text-muted-foreground">{c.duration_seconds}s</td>
-                <td className="px-4 py-2.5">{badge(c.outcome, c.flagged)}</td>
+                <td className="px-4 py-2.5 text-foreground">{(c as any).student_or_caller_number}</td>
+                <td className="px-4 py-2.5 text-muted-foreground">{(c as any).duration_seconds ?? 0}s</td>
+                <td className="px-4 py-2.5">{badge((c as any).outcome, false)}</td>
                 <td className="px-4 py-2.5 text-right">
                   <Link to="/call-logs/$callId" params={{ callId: c.id }} className="text-xs text-primary hover:underline">
                     View transcript

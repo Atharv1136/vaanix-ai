@@ -62,6 +62,44 @@ function Settings() {
     }
   }
 
+  const [playing, setPlaying] = useState(false);
+
+  async function previewAudio() {
+    if (!greet) return;
+    setPlaying(true);
+    const toastId = toast.loading("Generating audio preview...");
+    try {
+      const response = await fetch("/api/tts/preview", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ text: greet }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to generate preview audio.");
+      }
+
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const audio = new Audio(audioUrl);
+      
+      toast.dismiss(toastId);
+      toast.success("Playing preview");
+      
+      audio.onended = () => {
+        setPlaying(false);
+      };
+      
+      await audio.play();
+    } catch (error: any) {
+      toast.dismiss(toastId);
+      toast.error(error.message || "Could not play preview audio.");
+      setPlaying(false);
+    }
+  }
+
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div>
@@ -105,10 +143,11 @@ function Settings() {
           className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
         />
         <button
-          onClick={() => toast("Voice preview wires up when the calling engine is connected.", { icon: "🔈" })}
-          className="mt-3 inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+          onClick={previewAudio}
+          disabled={playing}
+          className="mt-3 inline-flex items-center gap-1.5 text-xs text-primary hover:underline disabled:opacity-50"
         >
-          <Volume2 className="h-3.5 w-3.5" /> Preview as audio
+          <Volume2 className="h-3.5 w-3.5" /> {playing ? "Generating..." : "Preview as audio"}
         </button>
       </section>
 

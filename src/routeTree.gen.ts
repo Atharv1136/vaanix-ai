@@ -9,21 +9,27 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
-import { Route as AuthRouteImport } from './routes/auth'
-import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
-import { Route as AuthenticatedKnowledgeBaseRouteImport } from './routes/_authenticated/knowledge-base'
-import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
-import { Route as AuthenticatedCallLogsRouteImport } from './routes/_authenticated/call-logs'
-import { Route as AuthenticatedCallLinesRouteImport } from './routes/_authenticated/call-lines'
+import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
+import { Route as AuthRouteImport } from './routes/auth'
+import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as AuthenticatedAnalyticsRouteImport } from './routes/_authenticated/analytics'
+import { Route as AuthenticatedApiKeysRouteImport } from './routes/_authenticated/api-keys'
+import { Route as AuthenticatedCallLogsRouteImport } from './routes/_authenticated/call-logs'
+import { Route as AuthenticatedPhoneNumbersRouteImport } from './routes/_authenticated/phone-numbers'
+import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
+import { Route as AuthenticatedToolsRouteImport } from './routes/_authenticated/tools'
+import { Route as AuthenticatedAssistantsIndexRouteImport } from './routes/_authenticated/assistants.index'
+import { Route as AuthenticatedAssistantsAssistantIdRouteImport } from './routes/_authenticated/assistants.$assistantId'
 import { Route as AuthenticatedCallLogsCallIdRouteImport } from './routes/_authenticated/call-logs.$callId'
 
-const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
-  id: '/sitemap.xml',
-  path: '/sitemap.xml',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
+  id: '/_authenticated',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthRoute = AuthRouteImport.update({
@@ -31,29 +37,19 @@ const AuthRoute = AuthRouteImport.update({
   path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
-  id: '/_authenticated',
+const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
+  id: '/sitemap.xml',
+  path: '/sitemap.xml',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
-  id: '/settings',
-  path: '/settings',
+const AuthenticatedAnalyticsRoute = AuthenticatedAnalyticsRouteImport.update({
+  id: '/analytics',
+  path: '/analytics',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedKnowledgeBaseRoute =
-  AuthenticatedKnowledgeBaseRouteImport.update({
-    id: '/knowledge-base',
-    path: '/knowledge-base',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
-  id: '/dashboard',
-  path: '/dashboard',
+const AuthenticatedApiKeysRoute = AuthenticatedApiKeysRouteImport.update({
+  id: '/api-keys',
+  path: '/api-keys',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedCallLogsRoute = AuthenticatedCallLogsRouteImport.update({
@@ -61,16 +57,34 @@ const AuthenticatedCallLogsRoute = AuthenticatedCallLogsRouteImport.update({
   path: '/call-logs',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedCallLinesRoute = AuthenticatedCallLinesRouteImport.update({
-  id: '/call-lines',
-  path: '/call-lines',
+const AuthenticatedPhoneNumbersRoute =
+  AuthenticatedPhoneNumbersRouteImport.update({
+    id: '/phone-numbers',
+    path: '/phone-numbers',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedAnalyticsRoute = AuthenticatedAnalyticsRouteImport.update({
-  id: '/analytics',
-  path: '/analytics',
+const AuthenticatedToolsRoute = AuthenticatedToolsRouteImport.update({
+  id: '/tools',
+  path: '/tools',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedAssistantsIndexRoute =
+  AuthenticatedAssistantsIndexRouteImport.update({
+    id: '/assistants/',
+    path: '/assistants/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedAssistantsAssistantIdRoute =
+  AuthenticatedAssistantsAssistantIdRouteImport.update({
+    id: '/assistants/$assistantId',
+    path: '/assistants/$assistantId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedCallLogsCallIdRoute =
   AuthenticatedCallLogsCallIdRouteImport.update({
     id: '/$callId',
@@ -83,24 +97,28 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/analytics': typeof AuthenticatedAnalyticsRoute
-  '/call-lines': typeof AuthenticatedCallLinesRoute
+  '/api-keys': typeof AuthenticatedApiKeysRoute
   '/call-logs': typeof AuthenticatedCallLogsRouteWithChildren
-  '/dashboard': typeof AuthenticatedDashboardRoute
-  '/knowledge-base': typeof AuthenticatedKnowledgeBaseRoute
+  '/phone-numbers': typeof AuthenticatedPhoneNumbersRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/tools': typeof AuthenticatedToolsRoute
+  '/assistants/$assistantId': typeof AuthenticatedAssistantsAssistantIdRoute
   '/call-logs/$callId': typeof AuthenticatedCallLogsCallIdRoute
+  '/assistants/': typeof AuthenticatedAssistantsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/analytics': typeof AuthenticatedAnalyticsRoute
-  '/call-lines': typeof AuthenticatedCallLinesRoute
+  '/api-keys': typeof AuthenticatedApiKeysRoute
   '/call-logs': typeof AuthenticatedCallLogsRouteWithChildren
-  '/dashboard': typeof AuthenticatedDashboardRoute
-  '/knowledge-base': typeof AuthenticatedKnowledgeBaseRoute
+  '/phone-numbers': typeof AuthenticatedPhoneNumbersRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/tools': typeof AuthenticatedToolsRoute
+  '/assistants/$assistantId': typeof AuthenticatedAssistantsAssistantIdRoute
   '/call-logs/$callId': typeof AuthenticatedCallLogsCallIdRoute
+  '/assistants': typeof AuthenticatedAssistantsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -109,12 +127,14 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/_authenticated/analytics': typeof AuthenticatedAnalyticsRoute
-  '/_authenticated/call-lines': typeof AuthenticatedCallLinesRoute
+  '/_authenticated/api-keys': typeof AuthenticatedApiKeysRoute
   '/_authenticated/call-logs': typeof AuthenticatedCallLogsRouteWithChildren
-  '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
-  '/_authenticated/knowledge-base': typeof AuthenticatedKnowledgeBaseRoute
+  '/_authenticated/phone-numbers': typeof AuthenticatedPhoneNumbersRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
+  '/_authenticated/tools': typeof AuthenticatedToolsRoute
+  '/_authenticated/assistants/$assistantId': typeof AuthenticatedAssistantsAssistantIdRoute
   '/_authenticated/call-logs/$callId': typeof AuthenticatedCallLogsCallIdRoute
+  '/_authenticated/assistants/': typeof AuthenticatedAssistantsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -123,24 +143,28 @@ export interface FileRouteTypes {
     | '/auth'
     | '/sitemap.xml'
     | '/analytics'
-    | '/call-lines'
+    | '/api-keys'
     | '/call-logs'
-    | '/dashboard'
-    | '/knowledge-base'
+    | '/phone-numbers'
     | '/settings'
+    | '/tools'
+    | '/assistants/$assistantId'
     | '/call-logs/$callId'
+    | '/assistants/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/auth'
     | '/sitemap.xml'
     | '/analytics'
-    | '/call-lines'
+    | '/api-keys'
     | '/call-logs'
-    | '/dashboard'
-    | '/knowledge-base'
+    | '/phone-numbers'
     | '/settings'
+    | '/tools'
+    | '/assistants/$assistantId'
     | '/call-logs/$callId'
+    | '/assistants'
   id:
     | '__root__'
     | '/'
@@ -148,12 +172,14 @@ export interface FileRouteTypes {
     | '/auth'
     | '/sitemap.xml'
     | '/_authenticated/analytics'
-    | '/_authenticated/call-lines'
+    | '/_authenticated/api-keys'
     | '/_authenticated/call-logs'
-    | '/_authenticated/dashboard'
-    | '/_authenticated/knowledge-base'
+    | '/_authenticated/phone-numbers'
     | '/_authenticated/settings'
+    | '/_authenticated/tools'
+    | '/_authenticated/assistants/$assistantId'
     | '/_authenticated/call-logs/$callId'
+    | '/_authenticated/assistants/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -165,18 +191,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/sitemap.xml': {
-      id: '/sitemap.xml'
-      path: '/sitemap.xml'
-      fullPath: '/sitemap.xml'
-      preLoaderRoute: typeof SitemapDotxmlRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/auth': {
-      id: '/auth'
-      path: '/auth'
-      fullPath: '/auth'
-      preLoaderRoute: typeof AuthRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated': {
@@ -186,32 +205,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authenticated/settings': {
-      id: '/_authenticated/settings'
-      path: '/settings'
-      fullPath: '/settings'
-      preLoaderRoute: typeof AuthenticatedSettingsRouteImport
+    '/sitemap.xml': {
+      id: '/sitemap.xml'
+      path: '/sitemap.xml'
+      fullPath: '/sitemap.xml'
+      preLoaderRoute: typeof SitemapDotxmlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/analytics': {
+      id: '/_authenticated/analytics'
+      path: '/analytics'
+      fullPath: '/analytics'
+      preLoaderRoute: typeof AuthenticatedAnalyticsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/knowledge-base': {
-      id: '/_authenticated/knowledge-base'
-      path: '/knowledge-base'
-      fullPath: '/knowledge-base'
-      preLoaderRoute: typeof AuthenticatedKnowledgeBaseRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/dashboard': {
-      id: '/_authenticated/dashboard'
-      path: '/dashboard'
-      fullPath: '/dashboard'
-      preLoaderRoute: typeof AuthenticatedDashboardRouteImport
+    '/_authenticated/api-keys': {
+      id: '/_authenticated/api-keys'
+      path: '/api-keys'
+      fullPath: '/api-keys'
+      preLoaderRoute: typeof AuthenticatedApiKeysRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/call-logs': {
@@ -221,18 +240,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCallLogsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/call-lines': {
-      id: '/_authenticated/call-lines'
-      path: '/call-lines'
-      fullPath: '/call-lines'
-      preLoaderRoute: typeof AuthenticatedCallLinesRouteImport
+    '/_authenticated/phone-numbers': {
+      id: '/_authenticated/phone-numbers'
+      path: '/phone-numbers'
+      fullPath: '/phone-numbers'
+      preLoaderRoute: typeof AuthenticatedPhoneNumbersRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/analytics': {
-      id: '/_authenticated/analytics'
-      path: '/analytics'
-      fullPath: '/analytics'
-      preLoaderRoute: typeof AuthenticatedAnalyticsRouteImport
+    '/_authenticated/settings': {
+      id: '/_authenticated/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof AuthenticatedSettingsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/tools': {
+      id: '/_authenticated/tools'
+      path: '/tools'
+      fullPath: '/tools'
+      preLoaderRoute: typeof AuthenticatedToolsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/assistants/': {
+      id: '/_authenticated/assistants/'
+      path: '/assistants'
+      fullPath: '/assistants/'
+      preLoaderRoute: typeof AuthenticatedAssistantsIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/assistants/$assistantId': {
+      id: '/_authenticated/assistants/$assistantId'
+      path: '/assistants/$assistantId'
+      fullPath: '/assistants/$assistantId'
+      preLoaderRoute: typeof AuthenticatedAssistantsAssistantIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/call-logs/$callId': {
@@ -260,20 +300,25 @@ const AuthenticatedCallLogsRouteWithChildren =
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedAnalyticsRoute: typeof AuthenticatedAnalyticsRoute
-  AuthenticatedCallLinesRoute: typeof AuthenticatedCallLinesRoute
+  AuthenticatedApiKeysRoute: typeof AuthenticatedApiKeysRoute
   AuthenticatedCallLogsRoute: typeof AuthenticatedCallLogsRouteWithChildren
-  AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
-  AuthenticatedKnowledgeBaseRoute: typeof AuthenticatedKnowledgeBaseRoute
+  AuthenticatedPhoneNumbersRoute: typeof AuthenticatedPhoneNumbersRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
+  AuthenticatedToolsRoute: typeof AuthenticatedToolsRoute
+  AuthenticatedAssistantsAssistantIdRoute: typeof AuthenticatedAssistantsAssistantIdRoute
+  AuthenticatedAssistantsIndexRoute: typeof AuthenticatedAssistantsIndexRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAnalyticsRoute: AuthenticatedAnalyticsRoute,
-  AuthenticatedCallLinesRoute: AuthenticatedCallLinesRoute,
+  AuthenticatedApiKeysRoute: AuthenticatedApiKeysRoute,
   AuthenticatedCallLogsRoute: AuthenticatedCallLogsRouteWithChildren,
-  AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
-  AuthenticatedKnowledgeBaseRoute: AuthenticatedKnowledgeBaseRoute,
+  AuthenticatedPhoneNumbersRoute: AuthenticatedPhoneNumbersRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
+  AuthenticatedToolsRoute: AuthenticatedToolsRoute,
+  AuthenticatedAssistantsAssistantIdRoute:
+    AuthenticatedAssistantsAssistantIdRoute,
+  AuthenticatedAssistantsIndexRoute: AuthenticatedAssistantsIndexRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
@@ -288,3 +333,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

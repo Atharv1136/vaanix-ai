@@ -1,23 +1,82 @@
+import dotenv from "dotenv";
+// Load local environment config variables as the very first step
+dotenv.config();
+
 import express from "express";
 import http from "http";
 import { WebSocketServer } from "ws";
-import dotenv from "dotenv";
-
-// Load local environment config variables
-dotenv.config();
 
 import { handleTwilioVoiceWebhook } from "./routes/twilioWebhook";
 import { handleMediaStream } from "./mediaStream/handler";
+import { handleTTSPreview } from "./routes/ttsPreview";
+import { handleOutboundBatch, handleSingleOutboundCall, updatePublicBaseUrl } from "./routes/outbound";
+import { handleEndCall } from "./routes/calls";
+import { handleVoiceToken } from "./routes/voiceToken";
+import {
+  authenticateApiKey,
+  getAssistants,
+  getAssistant,
+  createAssistant,
+  updateAssistant,
+  deleteAssistant
+} from "./routes/assistants";
+import {
+  addPhoneNumber,
+  syncPhoneNumbers,
+  uploadKbDocument,
+  getKbDocuments,
+  deleteKbDocument,
+} from "./routes/phoneAndKb";
 
 const app = express();
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
+// Dynamic tunnel URL detection
+app.use((req, res, next) => {
+  const host = req.headers.host;
+  if (host && !host.includes("localhost") && !host.includes("127.0.0.1")) {
+    updatePublicBaseUrl(`https://${host}`);
+  }
+  next();
+});
+
 // Express HTTP endpoints
+app.post("/api/config/tunnel", (req, res) => {
+  const { url } = req.body;
+  if (url) {
+    updatePublicBaseUrl(url);
+    res.json({ success: true, url });
+  } else {
+    res.status(400).json({ error: "Missing url." });
+  }
+});
+
 app.post("/webhooks/twilio/voice", handleTwilioVoiceWebhook);
+app.post("/api/voice-token", handleVoiceToken);
+app.post("/api/tts/preview", handleTTSPreview);
+app.post("/api/outbound/start", handleOutboundBatch);
+app.post("/api/outbound/call", handleSingleOutboundCall);
+app.post("/api/calls/:id/end", handleEndCall);
+
+// Assistants API (protected by API Key)
+app.get("/api/assistants", authenticateApiKey, getAssistants);
+app.get("/api/assistants/:id", authenticateApiKey, getAssistant);
+app.post("/api/assistants", authenticateApiKey, createAssistant);
+app.patch("/api/assistants/:id", authenticateApiKey, updateAssistant);
+app.delete("/api/assistants/:id", authenticateApiKey, deleteAssistant);
+
+// Phone Numbers API
+app.post("/api/phone-numbers", addPhoneNumber);
+app.post("/api/phone-numbers/sync", syncPhoneNumbers);
+
+// Knowledge Base API
+app.post("/api/assistants/:assistantId/kb-upload", uploadKbDocument);
+app.get("/api/assistants/:assistantId/kb-documents", getKbDocuments);
+app.delete("/api/kb-documents/:id", deleteKbDocument);
 
 // Health check route
-app.get("/health", (req, res) => {
+app.get("/health", (_req, res) => {
   res.status(200).send("OK");
 });
 

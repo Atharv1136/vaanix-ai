@@ -1,19 +1,17 @@
-import { createClient, LiveTranscriptionEvents } from "@deepgram/sdk";
-import type { LiveTranscriber } from "@deepgram/sdk";
+import { DeepgramClient } from "@deepgram/sdk";
 
-const DEEPGRAM_API_KEY = process.env.DEEPGRAM_API_KEY || "";
-
-export function createDeepgramStream(
+export async function createDeepgramStream(
   onTranscript: (text: string) => void,
   onError: (err: any) => void
 ) {
-  if (!DEEPGRAM_API_KEY) {
+  const apiKey = process.env.DEEPGRAM_API_KEY;
+  if (!apiKey) {
     throw new Error("Missing DEEPGRAM_API_KEY environment variable.");
   }
 
-  const deepgram = createClient(DEEPGRAM_API_KEY);
-  const connection = deepgram.listen.live({
-    model: "nova-2-phone",
+  const deepgram = new DeepgramClient(apiKey);
+  const connection = await deepgram.listen.v1.connect({
+    model: "nova-2", // Use verified working model ID to prevent 403 Forbidden
     language: "en-US",
     smart_format: true,
     encoding: "mulaw",
@@ -22,25 +20,32 @@ export function createDeepgramStream(
     endpointing: 300, // wait 300ms of silence to finalize sentence
   });
 
-  connection.on(LiveTranscriptionEvents.Open, () => {
+  connection.on("open", () => {
     console.log("[Deepgram] Connected to Live stream.");
   });
 
-  connection.on(LiveTranscriptionEvents.Transcript, (data) => {
-    const text = data.channel.alternatives[0].transcript;
-    if (text && data.is_final) {
-      onTranscript(text);
+  connection.on("message", (data: any) => {
+    console.log("[Deepgram] Socket message:", JSON.stringify(data));
+    if (data.type === "Results") {
+      const text = data.channel?.alternatives?.[0]?.transcript || "";
+      if (text && data.is_final) {
+        onTranscript(text);
+      }
     }
   });
 
-  connection.on(LiveTranscriptionEvents.Error, (error) => {
+  connection.on("error", (error: any) => {
     console.error("[Deepgram] Connection error:", error);
     onError(error);
   });
 
-  connection.on(LiveTranscriptionEvents.Close, () => {
+  connection.on("close", () => {
     console.log("[Deepgram] Connection closed.");
   });
+
+  // Explicitly connect to establish the WebSocket
+  connection.connect();
+  await connection.waitForOpen();
 
   return connection;
 }

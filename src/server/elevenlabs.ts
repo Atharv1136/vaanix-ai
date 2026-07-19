@@ -1,40 +1,89 @@
-const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY || "";
-const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM"; // default voice
+export async function getElevenLabsVoiceStream(text: string, voiceId?: string): Promise<Buffer> {
+  const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY || "";
+  const ELEVENLABS_VOICE_ID = voiceId || process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM";
 
-export async function getElevenLabsVoiceStream(text: string): Promise<Buffer> {
-  if (!ELEVENLABS_API_KEY) {
-    throw new Error("Missing ELEVENLABS_API_KEY environment variable.");
+  // 1. If ElevenLabs key is present, use ElevenLabs voice system
+  if (ELEVENLABS_API_KEY) {
+    const response = await fetch(
+      `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}/stream?output_format=pcm_8000`,
+      {
+        method: "POST",
+        headers: {
+          "xi-api-key": ELEVENLABS_API_KEY,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          text,
+          model_id: "eleven_monolingual_v1",
+          voice_settings: {
+            stability: 0.5,
+            similarity_boost: 0.75,
+          },
+        }),
+      }
+    );
+
+    if (response.ok) {
+      const arrayBuffer = await response.arrayBuffer();
+      return Buffer.from(arrayBuffer);
+    }
   }
 
-  // Twilio wants mulaw audio 8kHz mono. ElevenLabs supports returning PCM or MP3.
-  // We can request Elevenlabs PCM audio (e.g. pcm_8000, pcm_16000, pcm_22050, pcm_44100) or MP3.
-  // Using pcm_8000 allows us to easily convert PCM raw data directly into 8kHz mulaw bytes.
-  const response = await fetch(
-    `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}/stream?output_format=pcm_8000`,
-    {
+  // 2. If Neets API key is present, use it as the budget voice system
+  const NEETS_API_KEY = process.env.NEETS_API_KEY || "";
+  const NEETS_VOICE_ID = voiceId || process.env.NEETS_VOICE_ID || "us-female-2";
+
+  if (NEETS_API_KEY) {
+    const response = await fetch("https://api.neets.ai/v1/tts", {
       method: "POST",
       headers: {
-        "xi-api-key": ELEVENLABS_API_KEY,
+        "X-API-Key": NEETS_API_KEY,
         "content-type": "application/json",
       },
       body: JSON.stringify({
         text,
-        model_id: "eleven_monolingual_v1",
-        voice_settings: {
-          stability: 0.5,
-          similarity_boost: 0.75,
+        voice_id: NEETS_VOICE_ID,
+        params: {
+          model: "vits",
         },
       }),
-    }
-  );
+    });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`ElevenLabs API returned ${response.status}: ${errorText}`);
+    if (response.ok) {
+      const arrayBuffer = await response.arrayBuffer();
+      return Buffer.from(arrayBuffer);
+    }
   }
 
-  const arrayBuffer = await response.arrayBuffer();
-  return Buffer.from(arrayBuffer);
+  // 3. Fallback to Deepgram Aura TTS if DEEPGRAM_API_KEY is present
+  const DEEPGRAM_API_KEY = process.env.DEEPGRAM_API_KEY || "";
+  const DEEPGRAM_VOICE_ID = voiceId || process.env.DEEPGRAM_VOICE_ID || "aura-asteria-en";
+
+  if (DEEPGRAM_API_KEY) {
+    const response = await fetch(
+      `https://api.deepgram.com/v1/speak?model=${DEEPGRAM_VOICE_ID}&encoding=linear16&sample_rate=8000&container=none`,
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Token ${DEEPGRAM_API_KEY}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          text,
+        }),
+      }
+    );
+
+    if (response.ok) {
+      const arrayBuffer = await response.arrayBuffer();
+      return Buffer.from(arrayBuffer);
+    } else {
+      const errorText = await response.text();
+      throw new Error(`Deepgram Aura API returned ${response.status}: ${errorText}`);
+    }
+  }
+
+  throw new Error("Missing ELEVENLABS_API_KEY, NEETS_API_KEY, and DEEPGRAM_API_KEY environment variables.");
 }
 
 // Convert raw 8kHz 16-bit linear PCM audio into 8kHz 8-bit mulaw format

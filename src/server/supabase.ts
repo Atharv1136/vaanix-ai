@@ -1,46 +1,83 @@
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
+export { supabaseAdmin } from "@/integrations/supabase/client.server";
 import type { Database } from "@/integrations/supabase/types";
+import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
-export type CallLine = Database["public"]["Tables"]["call_lines"]["Row"];
+export type Assistant = Database["public"]["Tables"]["assistants"]["Row"];
+export type Tool = Database["public"]["Tables"]["tools"]["Row"];
+export type PhoneNumber = Database["public"]["Tables"]["phone_numbers"]["Row"];
 export type Call = Database["public"]["Tables"]["calls"]["Row"];
-export type KBSection = Database["public"]["Tables"]["kb_sections"]["Row"];
+export type KBDocument = Database["public"]["Tables"]["kb_documents"]["Row"];
 
-export async function getCallLine(phoneNumber: string): Promise<CallLine | null> {
+export async function getAssistant(assistantId: string): Promise<Assistant | null> {
   const { data, error } = await supabaseAdmin
-    .from("call_lines")
+    .from("assistants")
     .select("*")
-    .eq("phone_number", phoneNumber)
+    .eq("id", assistantId)
     .maybeSingle();
 
   if (error) {
-    console.error(`[Supabase] Error fetching line ${phoneNumber}:`, error);
+    console.error(`[Supabase] Error fetching assistant ${assistantId}:`, error);
     return null;
   }
   return data;
 }
 
-export async function getKnowledgeBase(): Promise<KBSection[]> {
+export async function getPhoneNumber(phoneNumber: string): Promise<PhoneNumber | null> {
   const { data, error } = await supabaseAdmin
-    .from("kb_sections")
-    .select("*");
+    .from("phone_numbers")
+    .select("*")
+    .eq("phone_number", phoneNumber)
+    .maybeSingle();
 
   if (error) {
-    console.error("[Supabase] Error fetching knowledge base:", error);
+    console.error(`[Supabase] Error fetching phone number ${phoneNumber}:`, error);
+    return null;
+  }
+  return data;
+}
+
+export async function getAssistantTools(assistantId: string): Promise<Tool[]> {
+  const { data, error } = await supabaseAdmin
+    .from("assistant_tools")
+    .select("tools(*)")
+    .eq("assistant_id", assistantId)
+    .eq("enabled", true);
+
+  if (error) {
+    console.error(`[Supabase] Error fetching tools for assistant ${assistantId}:`, error);
+    return [];
+  }
+  return data.map((d: any) => d.tools).filter(Boolean);
+}
+
+export async function getKBDocuments(toolId: string): Promise<KBDocument[]> {
+  const { data, error } = await supabaseAdmin
+    .from("kb_documents")
+    .select("*")
+    .eq("tool_id", toolId);
+
+  if (error) {
+    console.error(`[Supabase] Error fetching KB documents for tool ${toolId}:`, error);
     return [];
   }
   return data ?? [];
 }
 
-export async function createCallRecord(studentNumber: string, direction: "inbound" | "outbound", lineId: string | null): Promise<string | null> {
+export async function createCallRecord(
+  assistantId: string,
+  phoneNumberId: string | null,
+  studentOrCallerNumber: string,
+  direction: "inbound" | "outbound"
+): Promise<string | null> {
   const { data, error } = await supabaseAdmin
     .from("calls")
     .insert({
-      student_number: studentNumber,
+      assistant_id: assistantId,
+      phone_number_id: phoneNumberId,
+      student_or_caller_number: studentOrCallerNumber,
       direction,
-      line_id: lineId,
       outcome: "in_progress",
       started_at: new Date().toISOString(),
-      flagged: false,
     })
     .select("id")
     .single();
@@ -52,14 +89,19 @@ export async function createCallRecord(studentNumber: string, direction: "inboun
   return data.id;
 }
 
-export async function updateCallStatus(callId: string, durationSeconds: number, outcome: string, summary: string | null = null): Promise<void> {
+export async function updateCallStatus(
+  callId: string,
+  durationSeconds: number,
+  outcome: string,
+  costEstimate: number = 0
+): Promise<void> {
   const { error } = await supabaseAdmin
     .from("calls")
     .update({
       duration_seconds: durationSeconds,
       outcome,
       ended_at: new Date().toISOString(),
-      summary,
+      cost_estimate: costEstimate,
     })
     .eq("id", callId);
 
@@ -68,7 +110,12 @@ export async function updateCallStatus(callId: string, durationSeconds: number, 
   }
 }
 
-export async function saveCallTranscriptTurn(callId: string, speaker: "student" | "ai", text: string, turnIndex: number): Promise<void> {
+export async function saveCallTranscriptTurn(
+  callId: string,
+  speaker: "caller" | "ai",
+  text: string,
+  turnIndex: number
+): Promise<void> {
   const { error } = await supabaseAdmin
     .from("call_transcripts")
     .insert({
@@ -76,42 +123,10 @@ export async function saveCallTranscriptTurn(callId: string, speaker: "student" 
       speaker,
       text,
       turn_index: turnIndex,
-      ts: new Date().toISOString(),
+      timestamp: new Date().toISOString(),
     });
 
   if (error) {
     console.error(`[Supabase] Error saving transcript turn for ${callId}:`, error);
-  }
-}
-
-export async function incrementCommonQuery(questionText: string): Promise<void> {
-  // Simple check for string match
-  const { data, error } = await supabaseAdmin
-    .from("common_queries")
-    .select("*")
-    .eq("question_text", questionText)
-    .maybeSingle();
-
-  if (error) {
-    console.error("[Supabase] Error checking common queries:", error);
-    return;
-  }
-
-  if (data) {
-    await supabaseAdmin
-      .from("common_queries")
-      .update({
-        count: data.count + 1,
-        last_asked_at: new Date().toISOString(),
-      })
-      .eq("id", data.id);
-  } else {
-    await supabaseAdmin
-      .from("common_queries")
-      .insert({
-        question_text: questionText,
-        count: 1,
-        last_asked_at: new Date().toISOString(),
-      });
   }
 }

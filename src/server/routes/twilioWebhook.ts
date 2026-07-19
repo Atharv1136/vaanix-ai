@@ -1,57 +1,72 @@
 import { Request, Response } from "express";
 import twilio from "twilio";
-import { getCallLine, createCallRecord } from "../supabase";
+import { getPhoneNumber, createCallRecord } from "../supabase";
 
 export async function handleTwilioVoiceWebhook(req: Request, res: Response): Promise<void> {
-  const { To, From, CallSid } = req.body;
+  const { To, From, CallSid, Direction } = req.body;
+  // Query params from outbound URL (e.g. /webhooks/twilio/voice?assistant_id=...&call_record_id=...)
+  const queryAssistantId = req.query.assistant_id as string | undefined;
+  const queryCallRecordId = req.query.call_record_id as string | undefined;
 
-  // Mask details for logs
   const maskNumber = (num: string) => num ? `***${num.slice(-4)}` : "unknown";
-  console.log(`[TwilioWebhook] Incoming call SID ${CallSid?.substring(0, 8)} to ${maskNumber(To)} from ${maskNumber(From)}`);
+  console.log(`[TwilioWebhook] Call SID ${CallSid?.substring(0, 8)} to ${maskNumber(To)} from ${maskNumber(From)} dir=${Direction}`);
 
   res.type("text/xml");
 
   try {
-    // 1. Fetch matching active line configuration from Supabase
-    const line = await getCallLine(To);
+    let assistantId: string | null = null;
+    let phoneNumberId: string | null = null;
+    let callRecordId: string | null = queryCallRecordId || null;
 
-    if (!line) {
-      console.log(`[TwilioWebhook] Line ${To} not registered in call_lines. Rejecting call.`);
-      const response = new twilio.twiml.VoiceResponse();
-      response.say("Sorry, this line is not registered.");
-      res.status(200).send(response.toString());
-      return;
+    // Priority 1: outbound call — assistant_id in query param (set by our /api/outbound/call route)
+    if (queryAssistantId) {
+      assistantId = queryAssistantId;
+      console.log(`[TwilioWebhook] Outbound call using assistant: ${assistantId}`);
     }
-
-    // 2. If AI answering is disabled, redirect call to the staff forwarding desk number immediately
-    if (!line.ai_enabled) {
-      console.log(`[TwilioWebhook] AI answering disabled for line ${To}. Redirecting call.`);
-      const response = new twilio.twiml.VoiceResponse();
-      if (line.forward_to) {
-        response.dial(line.forward_to);
-      } else {
-        response.say("No forwarding number configured.");
+    // Priority 2: browser test call (Twilio Client passes it in body)
+    else if (req.body.assistantId) {
+      assistantId = req.body.assistantId;
+      console.log(`[TwilioWebhook] Browser test call for assistant: ${assistantId}`);
+    }
+    // Priority 3: inbound call — look up by the "To" phone number
+    else {
+      const phoneRecord = await getPhoneNumber(To);
+      if (!phoneRecord || !phoneRecord.assistant_id) {
+        console.log(`[TwilioWebhook] Line ${To} not registered or has no assistant.`);
+        const response = new twilio.twiml.VoiceResponse();
+        response.say("Sorry, this line is not in service.");
+        res.status(200).send(response.toString());
+        return;
       }
-      res.status(200).send(response.toString());
-      return;
+      assistantId = phoneRecord.assistant_id;
+      phoneNumberId = phoneRecord.id;
     }
 
-    // 3. Create call record row in Supabase
-    const callRecordId = await createCallRecord(From || "unknown", "inbound", line.id);
+    if (!assistantId) {
+       const response = new twilio.twiml.VoiceResponse();
+       response.say("Sorry, assistant not found.");
+       res.status(200).send(response.toString());
+       return;
+    }
+
+    // Create call record only if one wasn't already created by the outbound handler
+    if (!callRecordId) {
+      callRecordId = await createCallRecord(assistantId, phoneNumberId, From || "browser", queryCallRecordId ? "outbound" : "inbound");
+    }
 
     // 4. Return TwiML response to open WebSocket media stream link
     const response = new twilio.twiml.VoiceResponse();
-    response.say("Welcome to the college admission cell assistant.");
-    
+    // We don't want a long generic greeting here because the Assistant's `first_message` will be spoken via the websocket connection.
+    // So we just connect the stream immediately.
     const connect = response.connect();
-    // Pass custom parameters so websocket handler knows who to forward to and what call ID matches
+    
     const stream = connect.stream({
       url: `wss://${req.headers.host}/media-stream`,
     });
     
     stream.parameter({
-      name: "forward_to",
-      value: line.forward_to || "",
+      name: "assistant_id",
+      value: assistantId,
     });
 
     if (callRecordId) {

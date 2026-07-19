@@ -37,6 +37,26 @@ function TranscriptPanel() {
     navigate({ to: "/call-logs" });
   }
 
+  async function endCall() {
+    if (!data?.call) return;
+    const toastId = toast.loading("Terminating call...");
+    try {
+      const response = await fetch(`/api/calls/${callId}/end`, {
+        method: "POST",
+      });
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || "Failed to end call.");
+      }
+      toast.dismiss(toastId);
+      toast.success("Call terminated");
+      qc.invalidateQueries();
+    } catch (error: any) {
+      toast.dismiss(toastId);
+      toast.error(error.message || "Failed to end call");
+    }
+  }
+
   return (
     <AnimatePresence>
       <motion.div
@@ -93,7 +113,7 @@ function TranscriptPanel() {
                       }
                     >
                       <div className="text-[10px] uppercase tracking-wide opacity-70">
-                        {isAi ? "AI" : "Student"}
+                         {isAi ? "AI" : "Student"}
                       </div>
                       <div>{t.text}</div>
                     </div>
@@ -103,15 +123,25 @@ function TranscriptPanel() {
             )}
           </div>
 
-          <div className="border-t border-border px-5 py-3">
+          <div className="flex items-center justify-between border-t border-border px-5 py-3 gap-3">
             <button
               onClick={flagTurn}
               disabled={data?.call?.flagged}
-              className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground hover:bg-muted disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground hover:bg-muted disabled:opacity-50 cursor-pointer"
             >
               <Flag className="h-4 w-4 text-warning" />
               {data?.call?.flagged ? "Already flagged" : "Flag this call"}
             </button>
+
+            {data?.call?.outcome === "in_progress" && (
+              <button
+                onClick={endCall}
+                className="inline-flex items-center gap-2 rounded-lg bg-destructive px-3 py-2 text-sm font-medium text-destructive-foreground hover:bg-destructive/90 cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+                End Call
+              </button>
+            )}
           </div>
         </motion.aside>
       </motion.div>
