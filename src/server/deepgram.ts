@@ -2,34 +2,43 @@ import { DeepgramClient } from "@deepgram/sdk";
 
 export async function createDeepgramStream(
   onTranscript: (text: string) => void,
-  onError: (err: any) => void
+  onError: (err: any) => void,
+  onInterimTranscript?: (text: string) => void,
+  language?: string,
 ) {
   const apiKey = process.env.DEEPGRAM_API_KEY;
   if (!apiKey) {
     throw new Error("Missing DEEPGRAM_API_KEY environment variable.");
   }
 
+  // Map assistant language to Deepgram language code
+  const deepgramLang = language === "hi-IN" ? "hi" : language === "mr-IN" ? "mr" : "en-US";
+
   const deepgram = new DeepgramClient(apiKey);
   const connection = await deepgram.listen.v1.connect({
-    model: "nova-2", // Use verified working model ID to prevent 403 Forbidden
-    language: "en-US",
+    model: "nova-2",
+    language: deepgramLang,
     smart_format: true,
     encoding: "mulaw",
     sample_rate: 8000,
     channels: 1,
-    endpointing: 300, // wait 300ms of silence to finalize sentence
+    endpointing: 150,       // Reduced from 300ms for faster sentence finalization
+    utterance_end_ms: 1000, // Fire transcript after 1s of utterance silence
   });
 
   connection.on("open", () => {
-    console.log("[Deepgram] Connected to Live stream.");
+    console.log(`[Deepgram] Connected to Live stream. Language: ${deepgramLang}`);
   });
 
   connection.on("message", (data: any) => {
-    console.log("[Deepgram] Socket message:", JSON.stringify(data));
     if (data.type === "Results") {
       const text = data.channel?.alternatives?.[0]?.transcript || "";
-      if (text && data.is_final) {
-        onTranscript(text);
+      if (text) {
+        if (data.is_final) {
+          onTranscript(text);
+        } else if (onInterimTranscript) {
+          onInterimTranscript(text);
+        }
       }
     }
   });

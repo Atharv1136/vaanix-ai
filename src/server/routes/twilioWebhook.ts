@@ -7,9 +7,13 @@ export async function handleTwilioVoiceWebhook(req: Request, res: Response): Pro
   // Query params from outbound URL (e.g. /webhooks/twilio/voice?assistant_id=...&call_record_id=...)
   const queryAssistantId = req.query.assistant_id as string | undefined;
   const queryCallRecordId = req.query.call_record_id as string | undefined;
+  const queryCallerName = req.query.caller_name as string | undefined;
+  const callerName = queryCallerName || req.body.caller_name || "";
 
-  const maskNumber = (num: string) => num ? `***${num.slice(-4)}` : "unknown";
-  console.log(`[TwilioWebhook] Call SID ${CallSid?.substring(0, 8)} to ${maskNumber(To)} from ${maskNumber(From)} dir=${Direction}`);
+  const maskNumber = (num: string) => (num ? `***${num.slice(-4)}` : "unknown");
+  console.log(
+    `[TwilioWebhook] Call SID ${CallSid?.substring(0, 8)} to ${maskNumber(To)} from ${maskNumber(From)} dir=${Direction}`,
+  );
 
   res.type("text/xml");
 
@@ -43,15 +47,20 @@ export async function handleTwilioVoiceWebhook(req: Request, res: Response): Pro
     }
 
     if (!assistantId) {
-       const response = new twilio.twiml.VoiceResponse();
-       response.say("Sorry, assistant not found.");
-       res.status(200).send(response.toString());
-       return;
+      const response = new twilio.twiml.VoiceResponse();
+      response.say("Sorry, assistant not found.");
+      res.status(200).send(response.toString());
+      return;
     }
 
     // Create call record only if one wasn't already created by the outbound handler
     if (!callRecordId) {
-      callRecordId = await createCallRecord(assistantId, phoneNumberId, From || "browser", queryCallRecordId ? "outbound" : "inbound");
+      callRecordId = await createCallRecord(
+        assistantId,
+        phoneNumberId,
+        From || "browser",
+        queryCallRecordId ? "outbound" : "inbound",
+      );
     }
 
     // 4. Return TwiML response to open WebSocket media stream link
@@ -59,11 +68,11 @@ export async function handleTwilioVoiceWebhook(req: Request, res: Response): Pro
     // We don't want a long generic greeting here because the Assistant's `first_message` will be spoken via the websocket connection.
     // So we just connect the stream immediately.
     const connect = response.connect();
-    
+
     const stream = connect.stream({
       url: `wss://${req.headers.host}/media-stream`,
     });
-    
+
     stream.parameter({
       name: "assistant_id",
       value: assistantId,
@@ -73,6 +82,13 @@ export async function handleTwilioVoiceWebhook(req: Request, res: Response): Pro
       stream.parameter({
         name: "call_record_id",
         value: callRecordId,
+      });
+    }
+
+    if (callerName) {
+      stream.parameter({
+        name: "caller_name",
+        value: callerName,
       });
     }
 

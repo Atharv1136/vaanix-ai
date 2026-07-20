@@ -7,6 +7,7 @@ export type Tool = Database["public"]["Tables"]["tools"]["Row"];
 export type PhoneNumber = Database["public"]["Tables"]["phone_numbers"]["Row"];
 export type Call = Database["public"]["Tables"]["calls"]["Row"];
 export type KBDocument = Database["public"]["Tables"]["kb_documents"]["Row"];
+export type AssistantQA = Database["public"]["Tables"]["assistant_qas"]["Row"];
 
 export async function getAssistant(assistantId: string): Promise<Assistant | null> {
   const { data, error } = await supabaseAdmin
@@ -58,6 +59,37 @@ export async function getKBDocuments(toolId: string): Promise<KBDocument[]> {
 
   if (error) {
     console.error(`[Supabase] Error fetching KB documents for tool ${toolId}:`, error);
+    return [];
+  }
+  return data ?? [];
+}
+
+export async function getAssistantKBDocuments(assistantId: string): Promise<KBDocument[]> {
+  const { data: atRows, error: atErr } = await supabaseAdmin
+    .from("assistant_tools")
+    .select("tool_id, tools(tool_type)")
+    .eq("assistant_id", assistantId);
+
+  if (atErr || !atRows) {
+    console.error(`[Supabase] Error fetching assistant tools for ${assistantId}:`, atErr);
+    return [];
+  }
+
+  const kbToolIds = atRows
+    .filter((row: any) => row.tools?.tool_type === "knowledge_base")
+    .map((row: any) => row.tool_id);
+
+  if (kbToolIds.length === 0) {
+    return [];
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("kb_documents")
+    .select("*")
+    .in("tool_id", kbToolIds);
+
+  if (error) {
+    console.error(`[Supabase] Error fetching KB docs for assistant ${assistantId}:`, error);
     return [];
   }
   return data ?? [];
@@ -128,5 +160,48 @@ export async function saveCallTranscriptTurn(
 
   if (error) {
     console.error(`[Supabase] Error saving transcript turn for ${callId}:`, error);
+  }
+}
+
+export async function getAssistantQAs(assistantId: string): Promise<AssistantQA[]> {
+  const { data, error } = await supabaseAdmin
+    .from("assistant_qas")
+    .select("*")
+    .eq("assistant_id", assistantId)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    console.error(`[Supabase] Error fetching QAs for assistant ${assistantId}:`, error);
+    return [];
+  }
+  return data ?? [];
+}
+
+export async function deleteAssistantQAs(assistantId: string): Promise<void> {
+  const { error } = await supabaseAdmin
+    .from("assistant_qas")
+    .delete()
+    .eq("assistant_id", assistantId);
+
+  if (error) {
+    console.error(`[Supabase] Error deleting QAs for assistant ${assistantId}:`, error);
+  }
+}
+
+export async function saveAssistantQAs(assistantId: string, qas: { question: string; answer: string }[]): Promise<void> {
+  if (qas.length === 0) return;
+  const payload = qas.map(qa => ({
+    assistant_id: assistantId,
+    question: qa.question,
+    answer: qa.answer
+  }));
+
+  const { error } = await supabaseAdmin
+    .from("assistant_qas")
+    .insert(payload);
+
+  if (error) {
+    console.error(`[Supabase] Error saving QAs for assistant ${assistantId}:`, error);
+    throw error;
   }
 }

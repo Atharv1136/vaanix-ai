@@ -2,7 +2,13 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { PhoneCall, Plus, Phone, RefreshCw, X, Loader2, Zap, PhoneOutgoing } from "lucide-react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
@@ -22,6 +28,7 @@ function PhoneNumbers() {
 
   // Outbound call state
   const [outboundNumber, setOutboundNumber] = useState("");
+  const [outboundName, setOutboundName] = useState("");
   const [outboundLineId, setOutboundLineId] = useState("");
   const [outboundAssistantId, setOutboundAssistantId] = useState("");
   const [callStatus, setCallStatus] = useState<"idle" | "calling" | "success" | "error">("idle");
@@ -30,7 +37,10 @@ function PhoneNumbers() {
   const { data: phoneNumbers = [], isLoading } = useQuery({
     queryKey: ["phone_numbers"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("phone_numbers").select("*").order("created_at", { ascending: false });
+      const { data, error } = await supabase
+        .from("phone_numbers")
+        .select("*")
+        .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
     },
@@ -39,7 +49,10 @@ function PhoneNumbers() {
   const { data: assistants = [] } = useQuery({
     queryKey: ["assistants"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("assistants").select("id, name").eq("is_published", true);
+      const { data, error } = await supabase
+        .from("assistants")
+        .select("id, name")
+        .eq("is_published", true);
       if (error) throw error;
       return data;
     },
@@ -47,7 +60,10 @@ function PhoneNumbers() {
 
   const assignMutation = useMutation({
     mutationFn: async ({ id, assistantId }: { id: string; assistantId: string | null }) => {
-      const { error } = await supabase.from("phone_numbers").update({ assistant_id: assistantId }).eq("id", id);
+      const { error } = await supabase
+        .from("phone_numbers")
+        .update({ assistant_id: assistantId })
+        .eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -97,8 +113,14 @@ function PhoneNumbers() {
   }
 
   async function handleMakeCall() {
-    if (!outboundNumber) { toast.error("Enter a target phone number."); return; }
-    if (!outboundLineId) { toast.error("Select a phone line."); return; }
+    if (!outboundNumber) {
+      toast.error("Enter a target phone number.");
+      return;
+    }
+    if (!outboundLineId) {
+      toast.error("Select a phone line.");
+      return;
+    }
     setCallStatus("calling");
     setCallError("");
     try {
@@ -109,6 +131,7 @@ function PhoneNumbers() {
           student_number: outboundNumber,
           line_id: outboundLineId,
           context_note: outboundAssistantId ? `assistant_id:${outboundAssistantId}` : "",
+          caller_name: outboundName || "",
         }),
       });
       const data = await res.json();
@@ -133,7 +156,9 @@ function PhoneNumbers() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-foreground">Phone Numbers</h2>
-          <p className="text-sm text-muted-foreground mt-1">Manage your Twilio phone numbers and assign them to assistants.</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            Manage your Twilio phone numbers and assign them to assistants.
+          </p>
         </div>
         <div className="flex gap-2">
           <button
@@ -174,7 +199,10 @@ function PhoneNumbers() {
                   <PhoneCall className="w-5 h-5 text-primary" />
                   <h3 className="text-base font-semibold text-foreground">Add Phone Number</h3>
                 </div>
-                <button onClick={() => setShowImport(false)} className="p-1.5 rounded text-muted-foreground hover:bg-accent">
+                <button
+                  onClick={() => setShowImport(false)}
+                  className="p-1.5 rounded text-muted-foreground hover:bg-accent"
+                >
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -183,17 +211,19 @@ function PhoneNumbers() {
                   <Label>Phone Number</Label>
                   <Input
                     value={importNumber}
-                    onChange={e => setImportNumber(e.target.value)}
+                    onChange={(e) => setImportNumber(e.target.value)}
                     placeholder="+13186188647"
                     className="font-mono"
                   />
-                  <p className="text-xs text-muted-foreground">Include country code (e.g., +1 for US, +91 for India)</p>
+                  <p className="text-xs text-muted-foreground">
+                    Include country code (e.g., +1 for US, +91 for India)
+                  </p>
                 </div>
                 <div className="space-y-1.5">
                   <Label>Label</Label>
                   <Input
                     value={importLabel}
-                    onChange={e => setImportLabel(e.target.value)}
+                    onChange={(e) => setImportLabel(e.target.value)}
                     placeholder="Main Admissions Line"
                   />
                 </div>
@@ -230,18 +260,28 @@ function PhoneNumbers() {
         ) : phoneNumbers.length === 0 ? (
           <div className="p-12 flex flex-col items-center gap-3 text-center">
             <Phone className="w-10 h-10 text-muted-foreground/30" />
-            <p className="text-sm text-muted-foreground">No phone numbers yet. Add one or sync from Twilio.</p>
+            <p className="text-sm text-muted-foreground">
+              No phone numbers yet. Add one or sync from Twilio.
+            </p>
           </div>
         ) : (
           <div className="divide-y divide-border">
             {phoneNumbers.map((phone: any) => (
-              <div key={phone.id} className="grid grid-cols-4 px-6 py-4 items-center text-sm hover:bg-accent/20 transition-colors">
+              <div
+                key={phone.id}
+                className="grid grid-cols-4 px-6 py-4 items-center text-sm hover:bg-accent/20 transition-colors"
+              >
                 <div className="font-mono text-foreground font-medium">{phone.phone_number}</div>
                 <div className="text-muted-foreground">{phone.label || "—"}</div>
                 <div>
                   <Select
                     value={phone.assistant_id || "unassigned"}
-                    onValueChange={(val) => assignMutation.mutate({ id: phone.id, assistantId: val === "unassigned" ? null : val })}
+                    onValueChange={(val) =>
+                      assignMutation.mutate({
+                        id: phone.id,
+                        assistantId: val === "unassigned" ? null : val,
+                      })
+                    }
                   >
                     <SelectTrigger className="h-8 w-48 bg-background border-border">
                       <SelectValue placeholder="Unassigned" />
@@ -251,7 +291,9 @@ function PhoneNumbers() {
                         <span className="text-muted-foreground italic">Unassigned</span>
                       </SelectItem>
                       {assistants.map((a: any) => (
-                        <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                        <SelectItem key={a.id} value={a.id}>
+                          {a.name}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -283,13 +325,17 @@ function PhoneNumbers() {
           </div>
           <div>
             <h3 className="text-sm font-semibold text-foreground">Make an Outbound Call</h3>
-            <p className="text-xs text-muted-foreground">Launch a fully autonomous AI call to any number.</p>
+            <p className="text-xs text-muted-foreground">
+              Launch a fully autonomous AI call to any number.
+            </p>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="space-y-1.5">
-            <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">From (Your Line)</Label>
+            <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              From (Your Line)
+            </Label>
             <Select value={outboundLineId} onValueChange={setOutboundLineId}>
               <SelectTrigger className="bg-background border-border">
                 <SelectValue placeholder="Select a phone number" />
@@ -298,23 +344,40 @@ function PhoneNumbers() {
                 {phoneNumbers.map((p: any) => (
                   <SelectItem key={p.id} value={p.id}>
                     <span className="font-mono">{p.phone_number}</span>
-                    {p.label && <span className="ml-2 text-muted-foreground text-xs">({p.label})</span>}
+                    {p.label && (
+                      <span className="ml-2 text-muted-foreground text-xs">({p.label})</span>
+                    )}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Call To</Label>
+            <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              Call To
+            </Label>
             <Input
               value={outboundNumber}
-              onChange={e => setOutboundNumber(e.target.value)}
+              onChange={(e) => setOutboundNumber(e.target.value)}
               placeholder="+919876543210"
               className="font-mono bg-background border-border"
             />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Assistant (optional)</Label>
+            <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              Caller Name (optional)
+            </Label>
+            <Input
+              value={outboundName}
+              onChange={(e) => setOutboundName(e.target.value)}
+              placeholder="e.g. John Doe"
+              className="bg-background border-border"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              Assistant (optional)
+            </Label>
             <Select value={outboundAssistantId} onValueChange={setOutboundAssistantId}>
               <SelectTrigger className="bg-background border-border">
                 <SelectValue placeholder="Auto (from line)" />
@@ -322,7 +385,9 @@ function PhoneNumbers() {
               <SelectContent>
                 <SelectItem value="">Auto (from line assignment)</SelectItem>
                 {assistants.map((a: any) => (
-                  <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                  <SelectItem key={a.id} value={a.id}>
+                    {a.name}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -337,26 +402,37 @@ function PhoneNumbers() {
               callStatus === "calling"
                 ? "bg-muted text-muted-foreground cursor-not-allowed"
                 : callStatus === "success"
-                ? "bg-success text-success-foreground"
-                : "bg-primary text-primary-foreground hover:bg-primary/90"
+                  ? "bg-success text-success-foreground"
+                  : "bg-primary text-primary-foreground hover:bg-primary/90"
             }`}
           >
-            {callStatus === "calling" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
-            {callStatus === "calling" ? "Initiating..." : callStatus === "success" ? "Call Initiated!" : "Start Autonomous Call"}
+            {callStatus === "calling" ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Zap className="w-4 h-4" />
+            )}
+            {callStatus === "calling"
+              ? "Initiating..."
+              : callStatus === "success"
+                ? "Call Initiated!"
+                : "Start Autonomous Call"}
           </button>
           {callStatus === "success" && (
-            <button onClick={() => setCallStatus("idle")} className="text-xs text-muted-foreground hover:text-foreground">
+            <button
+              onClick={() => setCallStatus("idle")}
+              className="text-xs text-muted-foreground hover:text-foreground"
+            >
               Make another
             </button>
           )}
-          {callStatus === "error" && (
-            <span className="text-xs text-destructive">{callError}</span>
-          )}
+          {callStatus === "error" && <span className="text-xs text-destructive">{callError}</span>}
         </div>
 
         <div className="mt-3 p-3 rounded-lg bg-muted/50 border border-border">
           <p className="text-xs text-muted-foreground">
-            <strong className="text-foreground">How it works:</strong> Twilio will dial the number. When answered, your AI assistant handles the entire conversation autonomously using the Deepgram → NVIDIA NIM → TTS pipeline. Transcripts appear in Call Logs.
+            <strong className="text-foreground">How it works:</strong> Twilio will dial the number.
+            When answered, your AI assistant handles the entire conversation autonomously using the
+            Deepgram → NVIDIA NIM → TTS pipeline. Transcripts appear in Call Logs.
           </p>
         </div>
       </div>

@@ -21,6 +21,7 @@ export type Database = {
           model: string
           voice_provider: string
           voice_id: string
+          language: string
           created_at: string
           updated_at: string
           is_published: boolean
@@ -33,6 +34,7 @@ export type Database = {
           model?: string
           voice_provider?: string
           voice_id?: string
+          language?: string
           created_at?: string
           updated_at?: string
           is_published?: boolean
@@ -45,6 +47,7 @@ export type Database = {
           model?: string
           voice_provider?: string
           voice_id?: string
+          language?: string
           created_at?: string
           updated_at?: string
           is_published?: boolean
@@ -293,6 +296,41 @@ export type Database = {
           last_used_at?: string | null
         }
         Relationships: []
+      }
+      assistant_qas: {
+        Row: {
+          id: string
+          assistant_id: string
+          question: string
+          answer: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          assistant_id: string
+          question: string
+          answer: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          assistant_id?: string
+          question?: string
+          answer?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assistant_qas_assistant_id_fkey"
+            columns: ["assistant_id"]
+            isOneToOne: false
+            referencedRelation: "assistants"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       staff: {
         Row: {

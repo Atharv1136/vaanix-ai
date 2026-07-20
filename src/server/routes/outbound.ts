@@ -9,7 +9,11 @@ function getTwilioClient() {
   return twilio(accountSid, authToken);
 }
 
-export let activePublicBaseUrl = process.env.PUBLIC_BASE_URL || "";
+export let activePublicBaseUrl = "";
+
+export function getPublicBaseUrl(): string {
+  return activePublicBaseUrl || process.env.PUBLIC_BASE_URL || "";
+}
 
 export function updatePublicBaseUrl(url: string) {
   if (url && url !== activePublicBaseUrl) {
@@ -20,13 +24,18 @@ export function updatePublicBaseUrl(url: string) {
 
 function normalizePhoneNumber(raw: string): string {
   const num = raw.trim();
-  if (/^\d{10}$/.test(num)) return "+91" + num;   // Indian 10-digit
-  if (/^\d{12}$/.test(num)) return "+" + num;      // 12-digit without +
+  if (/^\d{10}$/.test(num)) return "+91" + num; // Indian 10-digit
+  if (/^\d{12}$/.test(num)) return "+" + num; // 12-digit without +
   if (!num.startsWith("+")) return "+" + num;
   return num;
 }
 
-function buildTwiml(publicBaseUrl: string, callId: string, assistantId: string, contextNote: string): string {
+function buildTwiml(
+  publicBaseUrl: string,
+  callId: string,
+  assistantId: string,
+  contextNote: string,
+): string {
   const wsHost = publicBaseUrl.replace("https://", "").replace("http://", "");
   return `
 <Response>
@@ -42,10 +51,10 @@ function buildTwiml(publicBaseUrl: string, callId: string, assistantId: string, 
 
 // POST /api/outbound/call — single outbound call
 export async function handleSingleOutboundCall(req: Request, res: Response): Promise<void> {
-  const { student_number, line_id, context_note } = req.body;
+  const { student_number, line_id, context_note, caller_name } = req.body;
 
   const twilioPhoneNumber = process.env.TWILIO_PHONE_NUMBER;
-  const publicBaseUrl = activePublicBaseUrl;
+  const publicBaseUrl = getPublicBaseUrl();
   const twilioClient = getTwilioClient();
 
   // Validate required params
@@ -54,7 +63,11 @@ export async function handleSingleOutboundCall(req: Request, res: Response): Pro
     return;
   }
   if (!twilioClient) {
-    res.status(500).json({ error: "Twilio credentials not configured (TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN)." });
+    res
+      .status(500)
+      .json({
+        error: "Twilio credentials not configured (TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN).",
+      });
     return;
   }
   if (!twilioPhoneNumber) {
@@ -62,7 +75,9 @@ export async function handleSingleOutboundCall(req: Request, res: Response): Pro
     return;
   }
   if (!publicBaseUrl) {
-    res.status(500).json({ error: "PUBLIC_BASE_URL is missing. Add your tunnel URL to .env (e.g. ngrok)." });
+    res
+      .status(500)
+      .json({ error: "PUBLIC_BASE_URL is missing. Add your tunnel URL to .env (e.g. ngrok)." });
     return;
   }
 
@@ -102,12 +117,19 @@ export async function handleSingleOutboundCall(req: Request, res: Response): Pro
     }
 
     if (!assistantId) {
-      res.status(400).json({ error: "No assistant assigned to this line and no published assistant found. Please assign an assistant to the phone number." });
+      res
+        .status(400)
+        .json({
+          error:
+            "No assistant assigned to this line and no published assistant found. Please assign an assistant to the phone number.",
+        });
       return;
     }
 
     const cleanNumber = normalizePhoneNumber(student_number);
-    console.log(`[SingleOutbound] Dialing: ${cleanNumber} from ${fromNumber} using assistant ${assistantId}`);
+    console.log(
+      `[SingleOutbound] Dialing: ${cleanNumber} from ${fromNumber} using assistant ${assistantId}`,
+    );
 
     // Create call record in DB
     const { data: call, error: callErr } = await supabaseAdmin
@@ -133,14 +155,15 @@ export async function handleSingleOutboundCall(req: Request, res: Response): Pro
     const twilioCall = await twilioClient.calls.create({
       to: cleanNumber,
       from: fromNumber,
-      url: `${publicBaseUrl}/webhooks/twilio/voice?assistant_id=${encodeURIComponent(assistantId)}&call_record_id=${encodeURIComponent(call.id)}`,
+      url: `${publicBaseUrl}/webhooks/twilio/voice?assistant_id=${encodeURIComponent(assistantId)}&call_record_id=${encodeURIComponent(call.id)}&caller_name=${encodeURIComponent(caller_name || "")}`,
       statusCallback: `${publicBaseUrl}/webhooks/twilio/status`,
       statusCallbackMethod: "POST",
     });
 
     console.log(`[SingleOutbound] Call SID: ${twilioCall.sid}`);
-    res.status(200).json({ message: "Outbound call initiated.", call_id: call.id, twilio_sid: twilioCall.sid });
-
+    res
+      .status(200)
+      .json({ message: "Outbound call initiated.", call_id: call.id, twilio_sid: twilioCall.sid });
   } catch (err: any) {
     console.error("[SingleOutbound] Error:", err);
     res.status(500).json({ error: err.message || "Failed to start outbound call." });
@@ -152,7 +175,7 @@ export async function handleOutboundBatch(req: Request, res: Response): Promise<
   const { student_numbers, line_id, context_note } = req.body;
 
   const twilioPhoneNumber = process.env.TWILIO_PHONE_NUMBER;
-  const publicBaseUrl = activePublicBaseUrl;
+  const publicBaseUrl = getPublicBaseUrl();
   const twilioClient = getTwilioClient();
 
   if (!student_numbers || !Array.isArray(student_numbers) || student_numbers.length === 0) {
@@ -243,7 +266,9 @@ export async function handleOutboundBatch(req: Request, res: Response): Promise<
       }
     }, 0);
 
-    res.status(200).json({ message: "Batch started.", batch_id: batchId, count: student_numbers.length });
+    res
+      .status(200)
+      .json({ message: "Batch started.", batch_id: batchId, count: student_numbers.length });
   } catch (err: any) {
     console.error("[OutboundBatch] Error:", err);
     res.status(500).json({ error: err.message || "Failed to start batch." });

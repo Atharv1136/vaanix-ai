@@ -9,7 +9,11 @@ import { WebSocketServer } from "ws";
 import { handleTwilioVoiceWebhook } from "./routes/twilioWebhook";
 import { handleMediaStream } from "./mediaStream/handler";
 import { handleTTSPreview } from "./routes/ttsPreview";
-import { handleOutboundBatch, handleSingleOutboundCall, updatePublicBaseUrl } from "./routes/outbound";
+import {
+  handleOutboundBatch,
+  handleSingleOutboundCall,
+  updatePublicBaseUrl,
+} from "./routes/outbound";
 import { handleEndCall } from "./routes/calls";
 import { handleVoiceToken } from "./routes/voiceToken";
 import {
@@ -18,7 +22,7 @@ import {
   getAssistant,
   createAssistant,
   updateAssistant,
-  deleteAssistant
+  deleteAssistant,
 } from "./routes/assistants";
 import {
   addPhoneNumber,
@@ -27,6 +31,14 @@ import {
   getKbDocuments,
   deleteKbDocument,
 } from "./routes/phoneAndKb";
+import {
+  handleGetQAs,
+  handleGenerateQAs,
+  handleSaveQA,
+  handleDeleteQA,
+  handleBulkSaveQAs,
+} from "./routes/assistantQas";
+import { voicePreviewRouter } from "./routes/voicePreview";
 
 const app = express();
 app.use(express.urlencoded({ extended: true }));
@@ -75,10 +87,20 @@ app.post("/api/assistants/:assistantId/kb-upload", uploadKbDocument);
 app.get("/api/assistants/:assistantId/kb-documents", getKbDocuments);
 app.delete("/api/kb-documents/:id", deleteKbDocument);
 
+// Cached Q&As API
+app.get("/api/assistants/:assistantId/qas", handleGetQAs);
+app.post("/api/assistants/:assistantId/qas/generate", handleGenerateQAs);
+app.post("/api/assistants/:assistantId/qas", handleSaveQA);
+app.post("/api/assistants/:assistantId/qas/bulk", handleBulkSaveQAs);
+app.delete("/api/qas/:id", handleDeleteQA);
+
 // Health check route
 app.get("/health", (_req, res) => {
   res.status(200).send("OK");
 });
+
+// Voice preview (no auth needed — just sample audio)
+app.use(voicePreviewRouter);
 
 // Server bootstrap
 const port = process.env.PORT || 3000;

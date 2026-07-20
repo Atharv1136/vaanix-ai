@@ -4,7 +4,7 @@ import { executeTool } from "./services/toolExecutor";
 
 let client: OpenAI | null = null;
 
-function getClient(): OpenAI {
+export function getClient(): OpenAI {
   const apiKey = process.env.NVIDIA_API_KEY || "";
   const baseURL = process.env.NIM_BASE_URL || "https://integrate.api.nvidia.com/v1";
   if (!apiKey) {
@@ -18,26 +18,32 @@ function getClient(): OpenAI {
 
 // Maps our assistant model IDs to NVIDIA NIM model IDs
 export const NVIDIA_MODELS: Record<string, string> = {
-  "nvidia/nemotron-70b": "nvidia/llama-3.3-nemotron-super-49b-v1",
+  "nvidia/nemotron-70b": "meta/llama-3.1-8b-instruct",
   "nvidia/nemotron-mini": "meta/llama-3.1-8b-instruct",
   "meta/llama-3.1-8b": "meta/llama-3.1-8b-instruct",
-  "meta/llama-3.3-70b": "nvidia/llama-3.3-nemotron-super-49b-v1",
+  "meta/llama-3.3-70b": "meta/llama-3.1-8b-instruct",
   "mistralai/mistral-7b": "meta/llama-3.1-8b-instruct",
 };
 
 export async function* getAIReplyStream(
   assistant: Assistant,
   tools: Tool[],
-  history: { speaker: "caller" | "ai" | "tool"; text?: string; tool_calls?: any[]; tool_results?: any[] }[]
+  history: {
+    speaker: "caller" | "ai" | "tool";
+    text?: string;
+    tool_calls?: any[];
+    tool_results?: any[];
+  }[],
+  signal?: AbortSignal,
 ): AsyncGenerator<string, void, unknown> {
   const openai = getClient();
 
-  // Resolve model — fall back to nemotron-70b as default
-  const modelId = NVIDIA_MODELS[assistant.model] || "nvidia/llama-3.3-nemotron-70b-instruct";
+  // Resolve model — fall back to llama-3.1-8b-instruct as default
+  const modelId = NVIDIA_MODELS[assistant.model] || "meta/llama-3.1-8b-instruct";
 
   const systemPrompt = `${assistant.system_prompt}
 
-CRITICAL INSTRUCTION: Keep your spoken turns brief (1-3 sentences). You are on a live voice call. Do not output markdown, bullet points, numbered lists, or complex formatting — your response will be spoken aloud by a text-to-speech engine. Speak naturally and conversationally.`;
+CRITICAL INSTRUCTION: You are on a live voice call. Keep your reply to 1-2 short sentences maximum. Be direct and natural. No markdown, no bullet points, no numbered lists — your response will be spoken aloud. Be conversational and concise like a human on the phone.`;
 
   // Map tools to OpenAI function-call schema
   const openAiTools: OpenAI.Chat.Completions.ChatCompletionTool[] = tools.map((t) => ({
@@ -101,15 +107,18 @@ CRITICAL INSTRUCTION: Keep your spoken turns brief (1-3 sentences). You are on a
   while (!finalResponseComplete && loopCount < 5) {
     loopCount++;
     try {
-      const stream = await openai.chat.completions.create({
-        model: modelId,
-        messages,
-        tools: openAiTools.length > 0 ? openAiTools : undefined,
-        tool_choice: openAiTools.length > 0 ? "auto" : undefined,
-        max_tokens: 512,
-        temperature: 0.6,
-        stream: true,
-      });
+      const stream = await openai.chat.completions.create(
+        {
+          model: modelId,
+          messages,
+          tools: openAiTools.length > 0 ? openAiTools : undefined,
+          tool_choice: openAiTools.length > 0 ? "auto" : undefined,
+          max_tokens: 180,
+          temperature: 0.5,
+          stream: true,
+        },
+        { signal },
+      );
 
       let currentText = "";
       let toolCalls: { id: string; name: string; args: string }[] = [];
@@ -149,10 +158,20 @@ CRITICAL INSTRUCTION: Keep your spoken turns brief (1-3 sentences). You are on a
           .map((tc) => ({
             id: tc.id || `tc_${Date.now()}`,
             name: tc.name,
-            input: (() => { try { return JSON.parse(tc.args || "{}"); } catch { return {}; } })(),
+            input: (() => {
+              try {
+                return JSON.parse(tc.args || "{}");
+              } catch {
+                return {};
+              }
+            })(),
           }));
 
-        history.push({ speaker: "ai", text: currentText || undefined, tool_calls: parsedToolCalls });
+        history.push({
+          speaker: "ai",
+          text: currentText || undefined,
+          tool_calls: parsedToolCalls,
+        });
         messages.push({
           role: "assistant",
           content: currentText || null,
