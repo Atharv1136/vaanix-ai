@@ -11,20 +11,27 @@ export async function createDeepgramStream(
     throw new Error("Missing DEEPGRAM_API_KEY environment variable.");
   }
 
-  // Map assistant language to Deepgram language code
-  const deepgramLang = language === "hi-IN" ? "hi" : language === "mr-IN" ? "mr" : "en-US";
+  // Map assistant language to Deepgram language code (using 'en' instead of 'en-US' for better compatibility)
+  const deepgramLang = language === "hi-IN" ? "hi" : language === "mr-IN" ? "mr" : "en";
+
+  console.log(`[Deepgram] Initialising connection with Lang: "${deepgramLang}" (original: "${language}")`);
+  console.log(`[Deepgram] API Key (first 8 chars): ${apiKey.substring(0, 8)}...`);
 
   const deepgram = new DeepgramClient(apiKey);
-  const connection = await deepgram.listen.v1.connect({
+  
+  const options = {
     model: "nova-2",
     language: deepgramLang,
     smart_format: true,
     encoding: "mulaw",
     sample_rate: 8000,
     channels: 1,
-    endpointing: 150,       // Reduced from 300ms for faster sentence finalization
-    utterance_end_ms: 1000, // Fire transcript after 1s of utterance silence
-  });
+    endpointing: 300, // Standard 300ms silence detection
+  };
+
+  console.log(`[Deepgram] Options:`, JSON.stringify(options));
+
+  const connection = await deepgram.listen.v1.connect(options as any);
 
   connection.on("open", () => {
     console.log(`[Deepgram] Connected to Live stream. Language: ${deepgramLang}`);
@@ -44,7 +51,7 @@ export async function createDeepgramStream(
   });
 
   connection.on("error", (error: any) => {
-    console.error("[Deepgram] Connection error:", error);
+    console.error("[Deepgram] Connection error details:", error);
     onError(error);
   });
 
@@ -58,3 +65,4 @@ export async function createDeepgramStream(
 
   return connection;
 }
+

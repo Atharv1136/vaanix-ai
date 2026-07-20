@@ -423,170 +423,186 @@ export function handleMediaStream(ws: WebSocket) {
           cleanup();
         }, 8 * 60 * 1000);
 
-        // Start Deepgram STT stream
+        // Start Deepgram STT stream — non-fatal if it fails
         const assistantLanguage = (assistant as any).language || "en-US";
-        deepgramStream = await createDeepgramStream(
-          async (text: string) => {
-            if (callEnded || !assistant) return;
-            console.log(`[Caller] Says (final): "${text}"`);
+        try {
+          deepgramStream = await createDeepgramStream(
+            async (text: string) => {
+              if (callEnded || !assistant) return;
+              console.log(`[Caller] Says (final): "${text}"`);
 
-            interruptAI();
+              interruptAI();
 
-            await saveCallTranscriptTurn(callSid, "caller", text, turnIndex++);
-            conversationHistory.push({ speaker: "caller", text });
-            broadcastTranscription(callSid, "caller", text);
+              await saveCallTranscriptTurn(callSid, "caller", text, turnIndex++);
+              conversationHistory.push({ speaker: "caller", text });
+              broadcastTranscription(callSid, "caller", text);
 
-            const turnController = new AbortController();
-            activeAbortController = turnController;
+              const turnController = new AbortController();
+              activeAbortController = turnController;
 
-            try {
-              // 1. Fast-path: QA cache lookup
-              let matchedAnswer = "";
-              let bestScore = 0;
-              let bestQA: any = null;
+              try {
+                // 1. Fast-path: QA cache lookup
+                let matchedAnswer = "";
+                let bestScore = 0;
+                let bestQA: any = null;
 
-              for (const qa of cachedQAs) {
-                const score = calculateSimilarity(text, qa.question);
-                if (score > bestScore) {
-                  bestScore = score;
-                  bestQA = qa;
-                }
-              }
-
-              if (bestScore >= 0.45 && bestQA) {
-                matchedAnswer = bestQA.answer;
-                console.log(
-                  `[Cache Hit] Score: ${bestScore.toFixed(2)} → "${bestQA.question}"`,
-                );
-              }
-
-              if (matchedAnswer) {
-                isAISpeaking = true;
-                console.log(`[AI] Cache Answer: "${matchedAnswer}"`);
-                await saveCallTranscriptTurn(callSid, "ai", matchedAnswer, turnIndex++);
-                broadcastTranscription(callSid, "ai", matchedAnswer);
-                conversationHistory.push({ speaker: "ai", text: matchedAnswer });
-
-                const pcmBuffer = await getElevenLabsVoiceStream(
-                  matchedAnswer,
-                  assistant.voice_id,
-                  turnController.signal,
-                  (assistant as any).language,
-                );
-                if (!turnController.signal.aborted && !callEnded) {
-                  const playbackMs = sendAudioToTwilio(ws, streamSid, pcmBuffer);
-                  if (playbackEndTimer) clearTimeout(playbackEndTimer);
-                  playbackEndTimer = setTimeout(() => {
-                    if (activeAbortController === turnController) {
-                      isAISpeaking = false;
-                      activeAbortController = null;
-                    }
-                  }, playbackMs + 600);
-                }
-                return;
-              }
-
-              // 2. Cache miss — KB injection + LLM with sentence-level streaming
-              console.log(`[Cache Miss] Streaming LLM response.`);
-
-              let kbContext = "";
-              if (kbDocs.length > 0) {
-                const lowerText = text.toLowerCase();
-                const matchedDocs = kbDocs.filter(
-                  (d) =>
-                    d.title.toLowerCase().includes(lowerText) ||
-                    d.content.toLowerCase().includes(lowerText) ||
-                    lowerText
-                      .split(/\s+/)
-                      .some((word) => word.length > 3 && d.content.toLowerCase().includes(word)),
-                );
-
-                if (matchedDocs.length > 0) {
-                  kbContext = `Here is relevant context from the knowledge base for this question:\n${matchedDocs
-                    .slice(0, 3)
-                    .map((d) => `--- ${d.title} ---\n${d.content}`)
-                    .join("\n\n")}\nAnswer the user's question using the above context.`;
-                  console.log(`[KB] Injected ${matchedDocs.length} docs into context.`);
-                }
-              }
-
-              let generationHistory = [...conversationHistory];
-              if (kbContext) {
-                generationHistory[generationHistory.length - 1] = {
-                  speaker: "caller",
-                  text: `${text}\n\n[CONTEXT:\n${kbContext}\n]`,
-                };
-              }
-
-              const replyGenerator = getAIReplyStream(
-                assistant,
-                tools,
-                generationHistory,
-                turnController.signal,
-              );
-
-              // 🚀 SENTENCE-LEVEL STREAMING: start speaking first sentence immediately
-              const fullReplyText = await streamReplyWithSentencePipeline(
-                replyGenerator,
-                turnController,
-                "LLM",
-              );
-
-              if (turnController.signal.aborted) {
-                console.log("[MediaStream] LLM generation aborted.");
-                return;
-              }
-
-              if (fullReplyText) {
-                console.log(`[AI] Full reply: "${fullReplyText}"`);
-                await saveCallTranscriptTurn(callSid, "ai", fullReplyText, turnIndex++);
-                broadcastTranscription(callSid, "ai", fullReplyText);
-                conversationHistory.push({ speaker: "ai", text: fullReplyText });
-              }
-
-              // Check for tool-driven actions
-              const lastTurn = conversationHistory[conversationHistory.length - 1];
-              if (lastTurn?.speaker === "tool" && lastTurn.tool_results) {
-                for (const tr of lastTurn.tool_results) {
-                  if (tr.content.includes("end_call")) {
-                    console.log("[MediaStream] Tool requested end call.");
-                    cleanup();
+                for (const qa of cachedQAs) {
+                  const score = calculateSimilarity(text, qa.question);
+                  if (score > bestScore) {
+                    bestScore = score;
+                    bestQA = qa;
                   }
                 }
+
+                if (bestScore >= 0.45 && bestQA) {
+                  matchedAnswer = bestQA.answer;
+                  console.log(
+                    `[Cache Hit] Score: ${bestScore.toFixed(2)} → "${bestQA.question}"`,
+                  );
+                }
+
+                if (matchedAnswer) {
+                  isAISpeaking = true;
+                  console.log(`[AI] Cache Answer: "${matchedAnswer}"`);
+                  await saveCallTranscriptTurn(callSid, "ai", matchedAnswer, turnIndex++);
+                  broadcastTranscription(callSid, "ai", matchedAnswer);
+                  conversationHistory.push({ speaker: "ai", text: matchedAnswer });
+
+                  const pcmBuffer = await getElevenLabsVoiceStream(
+                    matchedAnswer,
+                    assistant.voice_id,
+                    turnController.signal,
+                    (assistant as any).language,
+                  );
+                  if (!turnController.signal.aborted && !callEnded) {
+                    const playbackMs = sendAudioToTwilio(ws, streamSid, pcmBuffer);
+                    if (playbackEndTimer) clearTimeout(playbackEndTimer);
+                    playbackEndTimer = setTimeout(() => {
+                      if (activeAbortController === turnController) {
+                        isAISpeaking = false;
+                        activeAbortController = null;
+                      }
+                    }, playbackMs + 600);
+                  }
+                  return;
+                }
+
+                // 2. Cache miss — KB injection + LLM with sentence-level streaming
+                console.log(`[Cache Miss] Streaming LLM response.`);
+
+                let kbContext = "";
+                if (kbDocs.length > 0) {
+                  const lowerText = text.toLowerCase();
+                  const matchedDocs = kbDocs.filter(
+                    (d) =>
+                      d.title.toLowerCase().includes(lowerText) ||
+                      d.content.toLowerCase().includes(lowerText) ||
+                      lowerText
+                        .split(/\s+/)
+                        .some((word) => word.length > 3 && d.content.toLowerCase().includes(word)),
+                  );
+
+                  if (matchedDocs.length > 0) {
+                    kbContext = `Here is relevant context from the knowledge base for this question:\n${matchedDocs
+                      .slice(0, 3)
+                      .map((d) => `--- ${d.title} ---\n${d.content}`)
+                      .join("\n\n")}\nAnswer the user's question using the above context.`;
+                    console.log(`[KB] Injected ${matchedDocs.length} docs into context.`);
+                  }
+                }
+
+                let generationHistory = [...conversationHistory];
+                if (kbContext) {
+                  generationHistory[generationHistory.length - 1] = {
+                    speaker: "caller",
+                    text: `${text}\n\n[CONTEXT:\n${kbContext}\n]`,
+                  };
+                }
+
+                const replyGenerator = getAIReplyStream(
+                  assistant,
+                  tools,
+                  generationHistory,
+                  turnController.signal,
+                );
+
+                // 🚀 SENTENCE-LEVEL STREAMING: start speaking first sentence immediately
+                const fullReplyText = await streamReplyWithSentencePipeline(
+                  replyGenerator,
+                  turnController,
+                  "LLM",
+                );
+
+                if (turnController.signal.aborted) {
+                  console.log("[MediaStream] LLM generation aborted.");
+                  return;
+                }
+
+                if (fullReplyText) {
+                  console.log(`[AI] Full reply: "${fullReplyText}"`);
+                  await saveCallTranscriptTurn(callSid, "ai", fullReplyText, turnIndex++);
+                  broadcastTranscription(callSid, "ai", fullReplyText);
+                  conversationHistory.push({ speaker: "ai", text: fullReplyText });
+                }
+
+                // Check for tool-driven actions
+                const lastTurn = conversationHistory[conversationHistory.length - 1];
+                if (lastTurn?.speaker === "tool" && lastTurn.tool_results) {
+                  for (const tr of lastTurn.tool_results) {
+                    if (tr.content.includes("end_call")) {
+                      console.log("[MediaStream] Tool requested end call.");
+                      cleanup();
+                    }
+                  }
+                }
+              } catch (err: any) {
+                if (err.name === "AbortError" || turnController.signal.aborted) {
+                  console.log("[MediaStream] Turn aborted.");
+                } else {
+                  await handleFailover(err);
+                }
               }
-            } catch (err: any) {
-              if (err.name === "AbortError" || turnController.signal.aborted) {
-                console.log("[MediaStream] Turn aborted.");
-              } else {
-                await handleFailover(err);
+            },
+            (err) => {
+              // Deepgram STT error — non-fatal. Log and nullify so we stop sending audio to it.
+              console.warn(`[Deepgram] STT error (non-fatal, call continues): ${err?.message || err}`);
+              deepgramStream = null;
+            },
+            // Interim transcript → trigger early interruption
+            (interimText: string) => {
+              if (callEnded) return;
+              if (isAISpeaking || activeAbortController) {
+                console.log(`[Caller] Interim interrupt: "${interimText}"`);
+                interruptAI();
               }
-            }
-          },
-          (err) => {
-            handleFailover(err);
-          },
-          // Interim transcript → trigger early interruption
-          (interimText: string) => {
-            if (callEnded) return;
-            if (isAISpeaking || activeAbortController) {
-              console.log(`[Caller] Interim interrupt: "${interimText}"`);
-              interruptAI();
-            }
-          },
-          assistantLanguage,
-        );
+            },
+            assistantLanguage,
+          );
+        } catch (dgErr: any) {
+          // If Deepgram stream setup itself fails, call still continues — AI will still speak
+          console.warn(`[Deepgram] Failed to initialise STT stream (non-fatal): ${dgErr?.message || dgErr}`);
+          deepgramStream = null;
+        }
       }
 
       if (data.event === "media" && data.media) {
         if (!loggedFirstMedia) {
+          // SDK v5 uses getReadyState() instead of .readyState property
+          const rs = deepgramStream?.getReadyState ? deepgramStream.getReadyState() : deepgramStream?.readyState;
           console.log(
-            `[MediaStream] First media chunk received. readyState=${deepgramStream?.readyState}`,
+            `[MediaStream] First media chunk received. readyState=${rs}`,
           );
           loggedFirstMedia = true;
         }
-        if (deepgramStream && deepgramStream.readyState === 1) {
-          const rawAudioBuffer = Buffer.from(data.media.payload, "base64");
-          deepgramStream.sendMedia(rawAudioBuffer);
+        if (deepgramStream) {
+          // Support both SDK v5 getReadyState() and older .readyState property
+          const readyState = deepgramStream.getReadyState
+            ? deepgramStream.getReadyState()
+            : deepgramStream.readyState;
+          if (readyState === 1) {
+            const rawAudioBuffer = Buffer.from(data.media.payload, "base64");
+            deepgramStream.sendMedia(rawAudioBuffer);
+          }
         }
       }
 
