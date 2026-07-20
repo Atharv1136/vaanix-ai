@@ -7,11 +7,13 @@
  */
 
 import { MsEdgeTTS, OUTPUT_FORMAT } from "msedge-tts";
+import { Readable } from "stream";
+import { spawn } from "child_process";
 
 export interface EdgeVoice {
-  voiceId: string;         // The Edge TTS shortName
-  displayName: string;     // Human-readable name
-  language: string;        // Language code (en-US, hi-IN, mr-IN)
+  voiceId: string;
+  displayName: string;
+  language: string;
   gender: "Female" | "Male";
 }
 
@@ -35,77 +37,33 @@ export function isEdgeVoice(voiceId: string): boolean {
 }
 
 /**
- * Synthesize text using Microsoft Edge TTS and return raw 16-bit PCM at 8000 Hz.
+ * Read all bytes from a Node.js Readable stream into a Buffer.
  */
-export async function getEdgeTtsAudio(
-  text: string,
-  voiceId: string,
-  signal?: AbortSignal,
-): Promise<Buffer> {
-  const tts = new MsEdgeTTS();
-
-  // Set voice — Edge TTS uses shortName format
-  await tts.setMetadata(voiceId, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
-
-  // Get audio as a readable stream
-  const readable = tts.toStream(text);
-
-  const chunks: Buffer[] = [];
-
-  await new Promise<void>((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(new Error("Aborted"));
-      return;
-    }
-
-    signal?.addEventListener("abort", () => {
-      reject(new Error("Aborted"));
-    });
-
-    readable.on("data", (chunk: Buffer) => {
-      chunks.push(chunk);
-    });
-    readable.on("close", resolve);
+function readStreamToBuffer(readable: Readable): Promise<Buffer> {
+  return new Promise<Buffer>((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    readable.on("data", (chunk: Buffer) => chunks.push(chunk));
+    readable.on("end", () => resolve(Buffer.concat(chunks)));
     readable.on("error", reject);
   });
-
-  // msedge-tts returns MP3 by default. We need to convert MP3 → PCM 16-bit 8kHz.
-  // Use the raw audio and resample inline via simple downsampling.
-  const mp3Buffer = Buffer.concat(chunks);
-  const pcmBuffer = await convertMp3ToPcm8k(mp3Buffer);
-  return pcmBuffer;
 }
 
 /**
- * Convert MP3 buffer to raw 16-bit PCM at 8000 Hz using ffmpeg (if available)
- * or a pure-JS approach for small payloads.
+ * Convert MP3/audio buffer → raw 16-bit PCM at 8000 Hz using ffmpeg.
  */
-async function convertMp3ToPcm8k(mp3Buffer: Buffer): Promise<Buffer> {
-  // Try ffmpeg first (most reliable)
-  try {
-    return await convertWithFfmpeg(mp3Buffer);
-  } catch {
-    // Fallback: return mp3 buffer as-is (will sound distorted but won't crash)
-    console.warn("[EdgeTTS] ffmpeg not available, returning raw mp3 data");
-    return mp3Buffer;
-  }
-}
-
-function convertWithFfmpeg(mp3Buffer: Buffer): Promise<Buffer> {
+function convertToPcm8k(inputBuffer: Buffer): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    const { spawn } = require("child_process") as typeof import("child_process");
-
     const ffmpeg = spawn("ffmpeg", [
-      "-i", "pipe:0",          // Read from stdin
-      "-f", "s16le",           // Output format: signed 16-bit little-endian PCM
-      "-ar", "8000",           // Resample to 8000 Hz
-      "-ac", "1",              // Mono
-      "pipe:1",                // Write to stdout
+      "-i", "pipe:0",     // Read from stdin
+      "-f", "s16le",      // Output: signed 16-bit little-endian PCM
+      "-ar", "8000",      // Resample to 8000 Hz
+      "-ac", "1",         // Mono
+      "pipe:1",           // Write to stdout
     ]);
 
     const outputChunks: Buffer[] = [];
     ffmpeg.stdout.on("data", (chunk: Buffer) => outputChunks.push(chunk));
-    ffmpeg.stderr.on("data", () => {}); // suppress ffmpeg logs
+    ffmpeg.stderr.on("data", () => {}); // suppress ffmpeg stderr
     ffmpeg.on("close", (code: number) => {
       if (code === 0) {
         resolve(Buffer.concat(outputChunks));
@@ -115,9 +73,39 @@ function convertWithFfmpeg(mp3Buffer: Buffer): Promise<Buffer> {
     });
     ffmpeg.on("error", reject);
 
-    ffmpeg.stdin.write(mp3Buffer);
+    ffmpeg.stdin.write(inputBuffer);
     ffmpeg.stdin.end();
   });
+}
+
+/**
+ * Synthesize text using Microsoft Edge TTS and return raw 16-bit PCM at 8000 Hz.
+ */
+export async function getEdgeTtsAudio(
+  text: string,
+  voiceId: string,
+  signal?: AbortSignal,
+): Promise<Buffer> {
+  if (signal?.aborted) throw new Error("Aborted");
+
+  const tts = new MsEdgeTTS();
+
+  // setMetadata must be called before toStream
+  await tts.setMetadata(voiceId, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
+
+  // toStream() returns { audioStream, metadataStream } — NOT a plain stream
+  const { audioStream } = tts.toStream(text);
+
+  // Read all MP3 bytes from the audio stream
+  const mp3Buffer = await readStreamToBuffer(audioStream);
+
+  tts.close();
+
+  if (signal?.aborted) throw new Error("Aborted");
+
+  // Convert MP3 → raw PCM 16-bit 8kHz via ffmpeg
+  const pcmBuffer = await convertToPcm8k(mp3Buffer);
+  return pcmBuffer;
 }
 
 /**
