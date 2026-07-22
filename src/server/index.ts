@@ -148,12 +148,9 @@ if (existsSync(staticDir)) {
   });
 }
 
-// Server bootstrap
-// In production: Nitro runs on public PORT (3000), Express runs on BACKEND_PORT (3001).
-// In dev: Express runs on PORT (3000).
-const port = process.env.NODE_ENV === "production"
-  ? (process.env.BACKEND_PORT || 3001)
-  : (process.env.PORT || 3000);
+// Server bootstrap: Express listens directly on primary PORT (e.g. 10000 on Render / 3000 local)
+// so WebSocket upgrade requests to /media-stream are handled natively without proxy drops.
+const port = process.env.PORT || 3000;
 
 const server = http.createServer(app);
 

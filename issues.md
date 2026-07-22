@@ -10,6 +10,7 @@ This document serves as an exhaustive knowledge base for diagnosing and resolvin
 3. [Issue 3: "This page didn't load" Dashboard / Route Crashes](#issue-3-this-page-didnt-load-dashboard--route-crashes)
 4. [Issue 4: Inbound Calls Saying "Line Not In Service"](#issue-4-inbound-calls-saying-line-not-in-service)
 5. [Issue 5: Outbound Call Failures & Twilio Credentials](#issue-5-outbound-call-failures--twilio-credentials)
+6. [Issue 6: Production Port Mismatch & WebSocket Rejection](#issue-6-production-port-mismatch--websocket-rejection)
 
 ---
 
@@ -19,11 +20,13 @@ This document serves as an exhaustive knowledge base for diagnosing and resolvin
 When an inbound or outbound call connects, the call drops or hangs up after 1–2 seconds before the AI finishes speaking or receiving user audio.
 
 ### Root Causes
-1. **TTS Provider Failures**: If ElevenLabs or Deepgram API keys were missing, expired, or rate-limited, an unhandled exception was thrown during audio synthesis. This triggered `handleFailover()`, which executed `ws.close()`, disconnecting Twilio instantly.
-2. **Unassigned Inbound Line**: Twilio voice webhook received an incoming call to a number with no assigned `assistant_id`, returning a hangup TwiML instead of routing to an agent.
-3. **Turn Error Cascading**: Temporary network glitches during LLM streaming caused the WebSocket handler to close the entire call connection instead of recovering.
+1. **Port Mismatch & WebSocket Rejection**: Express (which registers the `/media-stream` WebSocket upgrade listener) was previously running on secondary `BACKEND_PORT=3001`, while Render routed public traffic to Nitro on `PORT=10000`. When Twilio attempted to connect to `wss://vaanix-ai.onrender.com/media-stream`, Nitro rejected the connection because it had no WebSocket handler on `/media-stream`. Twilio detected the immediate WebSocket failure and hung up the call.
+2. **TTS Provider Failures**: If ElevenLabs or Deepgram API keys were missing, expired, or rate-limited, an unhandled exception was thrown during audio synthesis. This triggered `handleFailover()`, which executed `ws.close()`, disconnecting Twilio instantly.
+3. **Unassigned Inbound Line**: Twilio voice webhook received an incoming call to a number with no assigned `assistant_id`, returning a hangup TwiML instead of routing to an agent.
+4. **Turn Error Cascading**: Temporary network glitches during LLM streaming caused the WebSocket handler to close the entire call connection instead of recovering.
 
 ### Permanent Fixes & Solutions
+- **Primary PORT Server Bootstrap**: Updated `src/server/index.ts` and `start.sh` so Express runs directly on the primary public `PORT`. All WebSocket upgrade requests to `/media-stream` are handled natively without proxy drops.
 - **Multi-Tier Free TTS Fallback**: Updated `getElevenLabsVoiceStream` in `src/server/elevenlabs.ts` to include Microsoft Edge TTS (`en-US-JennyNeural`, `hi-IN-SwaraNeural`) as an ultimate free fallback that requires no API keys and never fails.
 - **Non-Fatal Turn Errors**: Modified `src/server/mediaStream/handler.ts` so turn errors log diagnostic warnings without calling `cleanup()` or `ws.close()`. The call stays alive and connected.
 - **Global Default Agent**: Implemented `getDefaultAssistantId()` in `src/server/supabase.ts` and updated `src/server/routes/twilioWebhook.ts` so all unassigned lines automatically answer using the Default Agent.
