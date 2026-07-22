@@ -29,24 +29,12 @@ function createSupabaseFetch(supabaseKey: string): typeof fetch {
   };
 }
 
+const DEFAULT_SUPABASE_URL = "https://qeqdkcugmdmzwiklklpi.supabase.co";
+const DEFAULT_SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFlcWRrY3VnbWRtendpa2xrbHBpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQzODYwOTUsImV4cCI6MjA5OTk2MjA5NX0.qDBEwMJOrZ5rDVIhS7htSsVyh5dJYMpbR8qTp65a0BE";
+
 function createSupabaseAdminClient() {
-  const SUPABASE_URL = process.env.SUPABASE_URL;
-  let serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!serviceRoleKey && process.env.SUPABASE_PUBLISHABLE_KEY) {
-    console.warn("[Supabase] Missing SUPABASE_SERVICE_ROLE_KEY. Falling back to SUPABASE_PUBLISHABLE_KEY. Note: RLS bypass will not work.");
-    serviceRoleKey = process.env.SUPABASE_PUBLISHABLE_KEY;
-  }
-
-  if (!SUPABASE_URL || !serviceRoleKey) {
-    const missing = [
-      ...(!SUPABASE_URL ? ['SUPABASE_URL'] : []),
-      ...(!serviceRoleKey ? ['SUPABASE_SERVICE_ROLE_KEY'] : []),
-    ];
-    const message = `Missing Supabase environment variable(s): ${missing.join(', ')}. Connect Supabase in Lovable Cloud.`;
-    console.error(`[Supabase] ${message}`);
-    throw new Error(message);
-  }
+  const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
+  let serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || DEFAULT_SUPABASE_KEY;
 
   return createClient<Database>(SUPABASE_URL, serviceRoleKey, {
     global: {
