@@ -19,7 +19,7 @@ ENV PATH="/root/.bun/bin:$PATH"
 COPY package.json bun.lock bunfig.toml ./
 
 # Install all dependencies (including devDependencies needed for build)
-RUN bun install --frozen-lockfile
+RUN bun install
 
 # Copy full source
 COPY . .
