@@ -124,8 +124,11 @@ if (existsSync(staticDir)) {
 }
 
 // Server bootstrap
-// Express is the SOLE server — serves API routes + static SPA on PORT.
-const port = process.env.PORT || 3000;
+// In production: Nitro runs on public PORT (3000), Express runs on BACKEND_PORT (3001).
+// In dev: Express runs on PORT (3000).
+const port = process.env.NODE_ENV === "production"
+  ? (process.env.BACKEND_PORT || 3001)
+  : (process.env.PORT || 3000);
 
 const server = http.createServer(app);
 
