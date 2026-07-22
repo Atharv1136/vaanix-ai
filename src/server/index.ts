@@ -109,17 +109,17 @@ app.use(voicePreviewRouter);
 // In production the Docker build runs generate-index.mjs to create index.html.
 const staticDir = path.join(process.cwd(), ".output", "public");
 if (existsSync(staticDir)) {
-  app.use(express.static(staticDir, { index: false }));
+  app.use(express.static(staticDir));
 
-  // Catch-all: serve index.html for all non-API/non-webhook GET routes
-  // so that TanStack Router can handle client-side navigation.
-  app.get("/*splat", (_req, res) => {
-    const indexFile = path.join(staticDir, "index.html");
-    if (existsSync(indexFile)) {
-      res.sendFile(indexFile);
-    } else {
-      res.status(503).send("Frontend not built. Run generate-index.mjs after build.");
+  // Catch-all SPA fallback: serve index.html for all unhandled GET requests
+  app.use((req, res, next) => {
+    if (req.method === "GET" && !req.path.startsWith("/api") && !req.path.startsWith("/webhooks")) {
+      const indexFile = path.join(staticDir, "index.html");
+      if (existsSync(indexFile)) {
+        return res.sendFile(indexFile);
+      }
     }
+    next();
   });
 }
 
