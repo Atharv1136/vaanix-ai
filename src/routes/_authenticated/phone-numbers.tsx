@@ -30,7 +30,7 @@ function PhoneNumbers() {
   const [outboundNumber, setOutboundNumber] = useState("");
   const [outboundName, setOutboundName] = useState("");
   const [outboundLineId, setOutboundLineId] = useState("");
-  const [outboundAssistantId, setOutboundAssistantId] = useState("");
+  const [outboundAssistantId, setOutboundAssistantId] = useState("auto");
   const [callStatus, setCallStatus] = useState<"idle" | "calling" | "success" | "error">("idle");
   const [callError, setCallError] = useState("");
 
@@ -54,8 +54,8 @@ function PhoneNumbers() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("assistants")
-        .select("id, name")
-        .eq("is_published", true);
+        .select("id, name, is_published")
+        .order("name", { ascending: true });
       if (error) {
         console.error("Error fetching assistants:", error);
         return [];
@@ -118,25 +118,38 @@ function PhoneNumbers() {
     }
   }
 
+  // Auto-select line_id if phone numbers are loaded and none is selected
+  useEffect(() => {
+    if (phoneNumbers.length > 0 && !outboundLineId) {
+      setOutboundLineId(phoneNumbers[0].id);
+    }
+  }, [phoneNumbers, outboundLineId]);
+
   async function handleMakeCall() {
     if (!outboundNumber) {
       toast.error("Enter a target phone number.");
       return;
     }
-    if (!outboundLineId) {
-      toast.error("Select a phone line.");
+    // Fallback to first line if none selected
+    const activeLineId = outboundLineId || (phoneNumbers.length > 0 ? phoneNumbers[0].id : "");
+    if (!activeLineId) {
+      toast.error("Select or add a phone line first.");
       return;
     }
     setCallStatus("calling");
     setCallError("");
     try {
+      const assistantOverride = (outboundAssistantId && outboundAssistantId !== "auto") 
+        ? `assistant_id:${outboundAssistantId}` 
+        : "";
+
       const res = await fetch("/api/outbound/call", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           student_number: outboundNumber,
-          line_id: outboundLineId,
-          context_note: outboundAssistantId ? `assistant_id:${outboundAssistantId}` : "",
+          line_id: activeLineId,
+          context_note: assistantOverride,
           caller_name: outboundName || "",
         }),
       });
@@ -389,7 +402,7 @@ function PhoneNumbers() {
                 <SelectValue placeholder="Auto (from line)" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Auto (from line assignment)</SelectItem>
+                <SelectItem value="auto">Auto (from line assignment)</SelectItem>
                 {assistants.map((a: any) => (
                   <SelectItem key={a.id} value={a.id}>
                     {a.name}
