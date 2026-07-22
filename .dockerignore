@@ -1,0 +1,45 @@
+# Git metadata
+.git
+.gitignore
+
+# Local environment secrets — NEVER ship these
+.env
+.env.*
+.env.local
+.env.production
+.env.development
+
+# Dev/build artifacts that are rebuilt inside Docker
+node_modules
+dist
+dist-ssr
+.output
+.vinxi
+.tanstack
+.nitro
+.wrangler
+
+# Logs & temp files
+*.log
+tunnel_stdout.log
+tunnel.js
+
+# Editor/OS noise
+.vscode
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Planning / agent metadata (not needed at runtime)
+.agents
+.planning
+.lovable
+
+# Local SSL / tunnel certs
+*.pem
+*.key
+*.crt

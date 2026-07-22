@@ -1,0 +1,59 @@
+# render.yaml — Infrastructure as Code for Render
+# Docs: https://render.com/docs/render-yaml-spec
+
+services:
+  - type: web
+    name: vaanix-ai
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    # Branch to auto-deploy from
+    branch: main
+    # Render will inject PORT automatically
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      # ── Supabase ──────────────────────────────────────────────────────────
+      - key: SUPABASE_PROJECT_ID
+        sync: false   # Set manually in Render dashboard
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_PROJECT_ID
+        sync: false
+      - key: VITE_SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: VITE_SUPABASE_URL
+        sync: false
+
+      # ── NVIDIA LLM ────────────────────────────────────────────────────────
+      - key: NVIDIA_API_KEY
+        sync: false
+      - key: NIM_BASE_URL
+        value: https://integrate.api.nvidia.com/v1
+
+      # ── Twilio ────────────────────────────────────────────────────────────
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_PHONE_NUMBER
+        sync: false
+
+      # ── Deepgram STT / TTS ────────────────────────────────────────────────
+      - key: DEEPGRAM_API_KEY
+        sync: false
+
+      # ── Public URL (update after first deploy!) ───────────────────────────
+      # Set this to: https://vaanix-ai.onrender.com  (or your custom domain)
+      - key: PUBLIC_BASE_URL
+        sync: false
+
+    # Keep service alive — WebSockets require this
+    plan: starter
+
+    healthCheckPath: /health
+
+    # Auto-deploy on push to main
+    autoDeploy: true
