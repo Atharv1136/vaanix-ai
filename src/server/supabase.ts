@@ -37,6 +37,62 @@ export async function getPhoneNumber(phoneNumber: string): Promise<PhoneNumber |
   return data;
 }
 
+export async function getDefaultAssistantId(): Promise<string | null> {
+  if (process.env.DEFAULT_ASSISTANT_ID) {
+    return process.env.DEFAULT_ASSISTANT_ID;
+  }
+
+  try {
+    const { data: settings } = await supabaseAdmin
+      .from("app_settings")
+      .select("*")
+      .eq("id", 1)
+      .maybeSingle();
+
+    if (settings && (settings as any).default_assistant_id) {
+      return (settings as any).default_assistant_id;
+    }
+  } catch (err) {
+    console.error("[Supabase] Error reading app_settings default_assistant_id:", err);
+  }
+
+  const { data: fallback } = await supabaseAdmin
+    .from("assistants")
+    .select("id")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  return fallback?.id || null;
+}
+
+export async function setDefaultAssistantId(assistantId: string | null): Promise<boolean> {
+  process.env.DEFAULT_ASSISTANT_ID = assistantId || "";
+
+  try {
+    const { data: existing } = await supabaseAdmin
+      .from("app_settings")
+      .select("id")
+      .eq("id", 1)
+      .maybeSingle();
+
+    if (existing) {
+      await supabaseAdmin
+        .from("app_settings")
+        .update({ default_assistant_id: assistantId } as any)
+        .eq("id", 1);
+    } else {
+      await supabaseAdmin
+        .from("app_settings")
+        .insert({ id: 1, default_assistant_id: assistantId } as any);
+    }
+    return true;
+  } catch (err) {
+    console.warn("[Supabase] Updated in-memory default assistant:", assistantId);
+    return true;
+  }
+}
+
 export async function getAssistantTools(assistantId: string): Promise<Tool[]> {
   const { data, error } = await supabaseAdmin
     .from("assistant_tools")

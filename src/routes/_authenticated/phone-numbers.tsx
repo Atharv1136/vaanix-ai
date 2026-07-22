@@ -16,7 +16,26 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 export const Route = createFileRoute("/_authenticated/phone-numbers")({
+  ssr: false,
   component: PhoneNumbers,
+  errorComponent: ({ error }: { error: any }) => {
+    console.error("PhoneNumbers Route Error:", error);
+    return (
+      <div className="p-8 text-center text-slate-300 max-w-lg mx-auto bg-[#0A0D16] border border-white/10 rounded-2xl my-8 shadow-2xl">
+        <PhoneCall className="w-10 h-10 mx-auto text-amber-400 mb-3 animate-pulse" />
+        <h3 className="text-lg font-bold text-slate-100">Phone Numbers Console</h3>
+        <p className="text-xs text-slate-400 mt-2">
+          {error?.message || "Initializing phone services..."}
+        </p>
+        <button
+          onClick={() => window.location.reload()}
+          className="mt-5 inline-flex items-center gap-2 rounded-xl bg-gold-gradient px-4 py-2 text-xs font-bold text-[#05070D] shadow-md hover:opacity-90 transition-opacity"
+        >
+          <RefreshCw className="w-3.5 h-3.5" /> Refresh Console
+        </button>
+      </div>
+    );
+  },
 });
 
 function PhoneNumbers() {
@@ -25,6 +44,44 @@ function PhoneNumbers() {
   const [importLabel, setImportLabel] = useState("");
   const [importNumber, setImportNumber] = useState("");
   const [syncing, setSyncing] = useState(false);
+
+  // Default Agent state
+  const { data: defaultAgentId = "", refetch: refetchDefaultAgent } = useQuery({
+    queryKey: ["default_agent_setting"],
+    queryFn: async () => {
+      try {
+        const res = await fetch("/api/settings/default-agent");
+        if (!res.ok) return "";
+        const json = await res.json();
+        return json.default_assistant_id || "";
+      } catch {
+        return "";
+      }
+    },
+  });
+
+  const [savingDefaultAgent, setSavingDefaultAgent] = useState(false);
+
+  async function handleSaveDefaultAgent(agentId: string) {
+    setSavingDefaultAgent(true);
+    try {
+      const res = await fetch("/api/settings/default-agent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assistant_id: agentId === "none" ? "" : agentId }),
+      });
+      if (res.ok) {
+        toast.success("Default Agent updated! Unassigned calls will use this agent.");
+        refetchDefaultAgent();
+      } else {
+        toast.error("Failed to update Default Agent.");
+      }
+    } catch {
+      toast.error("Network error saving Default Agent.");
+    } finally {
+      setSavingDefaultAgent(false);
+    }
+  }
 
   // Outbound call state
   const [outboundNumber, setOutboundNumber] = useState("");
@@ -265,6 +322,49 @@ function PhoneNumbers() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Default Call Agent Configuration Card */}
+      <div className="rounded-xl border border-border bg-card p-6 shadow-md">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400">
+              <Zap className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
+                Default Call Agent
+                <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
+                  Global Fallback
+                </span>
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Automatically answers all incoming calls and handles unassigned phone lines.
+              </p>
+            </div>
+          </div>
+          <div className="w-full sm:w-auto min-w-[240px]">
+            <Select
+              value={defaultAgentId || "none"}
+              onValueChange={handleSaveDefaultAgent}
+              disabled={savingDefaultAgent}
+            >
+              <SelectTrigger className="bg-background border-border font-medium">
+                <SelectValue placeholder="Select Default Agent" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">
+                  <span className="text-muted-foreground italic">None (First Available Agent)</span>
+                </SelectItem>
+                {assistants.map((a: any) => (
+                  <SelectItem key={a.id} value={a.id}>
+                    {a.name} {a.is_published ? "✓" : "(Draft)"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </div>
 
       {/* Numbers Table */}
       <div className="overflow-hidden rounded-xl border border-border bg-card">

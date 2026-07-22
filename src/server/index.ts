@@ -41,6 +41,7 @@ import {
   handleBulkSaveQAs,
 } from "./routes/assistantQas";
 import { voicePreviewRouter } from "./routes/voicePreview";
+import { getDefaultAssistantId, setDefaultAssistantId } from "./supabase";
 
 const app = express();
 app.use(express.urlencoded({ extended: true }));
@@ -95,6 +96,26 @@ app.post("/api/assistants/:assistantId/qas/generate", handleGenerateQAs);
 app.post("/api/assistants/:assistantId/qas", handleSaveQA);
 app.post("/api/assistants/:assistantId/qas/bulk", handleBulkSaveQAs);
 app.delete("/api/qas/:id", handleDeleteQA);
+
+// Default Agent Settings API
+app.get("/api/settings/default-agent", async (_req, res) => {
+  try {
+    const defaultId = await getDefaultAssistantId();
+    res.json({ default_assistant_id: defaultId });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/settings/default-agent", async (req, res) => {
+  try {
+    const { assistant_id } = req.body;
+    await setDefaultAssistantId(assistant_id || null);
+    res.json({ success: true, default_assistant_id: assistant_id });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // Health check route
 app.get("/health", (_req, res) => {

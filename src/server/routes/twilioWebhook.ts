@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import twilio from "twilio";
-import { getPhoneNumber, createCallRecord } from "../supabase";
+import { getPhoneNumber, createCallRecord, getDefaultAssistantId } from "../supabase";
 
 export async function handleTwilioVoiceWebhook(req: Request, res: Response): Promise<void> {
   const { To, From, CallSid, Direction } = req.body;
@@ -32,18 +32,18 @@ export async function handleTwilioVoiceWebhook(req: Request, res: Response): Pro
       assistantId = req.body.assistantId;
       console.log(`[TwilioWebhook] Browser test call for assistant: ${assistantId}`);
     }
-    // Priority 3: inbound call — look up by the "To" phone number
+    // Priority 3: inbound call — look up by the "To" phone number, or fallback to Default Agent
     else {
       const phoneRecord = await getPhoneNumber(To);
-      if (!phoneRecord || !phoneRecord.assistant_id) {
-        console.log(`[TwilioWebhook] Line ${To} not registered or has no assistant.`);
-        const response = new twilio.twiml.VoiceResponse();
-        response.say("Sorry, this line is not in service.");
-        res.status(200).send(response.toString());
-        return;
+      if (phoneRecord && phoneRecord.assistant_id) {
+        assistantId = phoneRecord.assistant_id;
+        phoneNumberId = phoneRecord.id;
+        console.log(`[TwilioWebhook] Inbound call assigned to assistant: ${assistantId}`);
+      } else {
+        if (phoneRecord) phoneNumberId = phoneRecord.id;
+        assistantId = await getDefaultAssistantId();
+        console.log(`[TwilioWebhook] Inbound line ${To} unassigned, using Default Agent: ${assistantId}`);
       }
-      assistantId = phoneRecord.assistant_id;
-      phoneNumberId = phoneRecord.id;
     }
 
     if (!assistantId) {

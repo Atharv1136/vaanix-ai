@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import twilio from "twilio";
-import { supabaseAdmin } from "../supabase";
+import { supabaseAdmin, getDefaultAssistantId } from "../supabase";
 
 function getTwilioClient() {
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
@@ -105,15 +105,9 @@ export async function handleSingleOutboundCall(req: Request, res: Response): Pro
       if (override) assistantId = override;
     }
 
-    // Fallback: use the first published assistant if none assigned
+    // Fallback: use Default Agent if none assigned
     if (!assistantId) {
-      const { data: fallback } = await supabaseAdmin
-        .from("assistants")
-        .select("id")
-        .eq("is_published", true)
-        .limit(1)
-        .maybeSingle();
-      if (fallback) assistantId = fallback.id;
+      assistantId = (await getDefaultAssistantId()) || "";
     }
 
     if (!assistantId) {
