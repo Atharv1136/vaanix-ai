@@ -314,6 +314,11 @@ function PhoneNumbers() {
                           {a.name}
                         </SelectItem>
                       ))}
+                      {phone.assistant_id && !assistants.some((a: any) => a.id === phone.assistant_id) && (
+                        <SelectItem value={phone.assistant_id}>
+                          Assigned Assistant
+                        </SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -355,19 +360,25 @@ function PhoneNumbers() {
             <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
               From (Your Line)
             </Label>
-            <Select value={outboundLineId} onValueChange={setOutboundLineId}>
+            <Select value={outboundLineId || undefined} onValueChange={setOutboundLineId}>
               <SelectTrigger className="bg-background border-border">
                 <SelectValue placeholder="Select a phone number" />
               </SelectTrigger>
               <SelectContent>
-                {phoneNumbers.map((p: any) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    <span className="font-mono">{p.phone_number}</span>
-                    {p.label && (
-                      <span className="ml-2 text-muted-foreground text-xs">({p.label})</span>
-                    )}
+                {phoneNumbers.length === 0 ? (
+                  <SelectItem value="none_available" disabled>
+                    No phone numbers available
                   </SelectItem>
-                ))}
+                ) : (
+                  phoneNumbers.map((p: any) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      <span className="font-mono">{p.phone_number}</span>
+                      {p.label && (
+                        <span className="ml-2 text-muted-foreground text-xs">({p.label})</span>
+                      )}
+                    </SelectItem>
+                  ))
+                )}
               </SelectContent>
             </Select>
           </div>
@@ -397,7 +408,7 @@ function PhoneNumbers() {
             <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
               Assistant (optional)
             </Label>
-            <Select value={outboundAssistantId} onValueChange={setOutboundAssistantId}>
+            <Select value={outboundAssistantId || "auto"} onValueChange={setOutboundAssistantId}>
               <SelectTrigger className="bg-background border-border">
                 <SelectValue placeholder="Auto (from line)" />
               </SelectTrigger>
