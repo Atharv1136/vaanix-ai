@@ -5,7 +5,7 @@ dotenv.config();
 import express from "express";
 import http from "http";
 import path from "path";
-import { existsSync } from "fs";
+import { existsSync, readdirSync } from "fs";
 import WebSocket, { WebSocketServer } from "ws";
 
 if (typeof (globalThis as any).WebSocket === "undefined") {
@@ -135,30 +135,66 @@ if (existsSync(staticDir)) {
   app.use(express.static(staticDir));
 }
 
+function serveSpaFallback(res: express.Response) {
+  const indexFile = path.join(staticDir, "index.html");
+  if (existsSync(indexFile)) {
+    return res.sendFile(indexFile);
+  }
+
+  const assetsDir = path.join(staticDir, "assets");
+  let cssFile = "";
+  let jsFile = "";
+
+  try {
+    if (existsSync(assetsDir)) {
+      const files = readdirSync(assetsDir);
+      cssFile = files.find((f) => f.startsWith("styles-") && f.endsWith(".css")) || "";
+      jsFile = files.find((f) => f.startsWith("index-") && f.endsWith(".js")) || "";
+    }
+  } catch {}
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Vaanix AI Console</title>
+  ${cssFile ? `<link rel="stylesheet" href="/assets/${cssFile}" />` : ""}
+</head>
+<body class="bg-background text-foreground antialiased">
+  <div id="root"></div>
+  ${jsFile ? `<script type="module" src="/assets/${jsFile}"></script>` : ""}
+</body>
+</html>`;
+
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.status(200).send(html);
+}
+
 // Proxy all non-API GET requests to internal Nitro SSR server running on port 3001
 app.use((req, res, next) => {
   if (req.method === "GET" && !req.path.startsWith("/api") && !req.path.startsWith("/webhooks")) {
+    const headers = { ...req.headers };
+    headers.host = "127.0.0.1:3001";
+
     const proxyReq = http.request(
       {
         host: "127.0.0.1",
         port: 3001,
         path: req.url,
         method: req.method,
-        headers: req.headers,
+        headers,
       },
       (proxyRes) => {
+        if (proxyRes.statusCode === 404) {
+          return serveSpaFallback(res);
+        }
         res.writeHead(proxyRes.statusCode || 200, proxyRes.headers);
         proxyRes.pipe(res, { end: true });
       }
     );
-    proxyReq.on("error", (err) => {
-      console.warn("[Proxy Warning] Nitro SSR fallback failed, serving static fallback:", err.message);
-      const indexFile = path.join(staticDir, "index.html");
-      if (existsSync(indexFile)) {
-        res.sendFile(indexFile);
-      } else {
-        res.status(500).send("SSR Server Error");
-      }
+    proxyReq.on("error", (_err) => {
+      serveSpaFallback(res);
     });
     req.pipe(proxyReq, { end: true });
     return;
