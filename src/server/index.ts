@@ -113,7 +113,7 @@ if (existsSync(staticDir)) {
 
   // Catch-all: serve index.html for all non-API/non-webhook GET routes
   // so that TanStack Router can handle client-side navigation.
-  app.get("*", (_req, res) => {
+  app.get("/*splat", (_req, res) => {
     const indexFile = path.join(staticDir, "index.html");
     if (existsSync(indexFile)) {
       res.sendFile(indexFile);
