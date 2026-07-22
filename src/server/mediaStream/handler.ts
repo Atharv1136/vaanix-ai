@@ -559,7 +559,7 @@ export function handleMediaStream(ws: WebSocket) {
                 if (err.name === "AbortError" || turnController.signal.aborted) {
                   console.log("[MediaStream] Turn aborted.");
                 } else {
-                  await handleFailover(err);
+                  console.error("[MediaStream] Turn error (call remains active):", err?.message || err);
                 }
               }
             },

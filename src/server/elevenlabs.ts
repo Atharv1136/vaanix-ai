@@ -89,34 +89,44 @@ export async function getElevenLabsVoiceStream(
     }
   }
 
-  // 4. Deepgram Aura — final fallback (English only, always available)
+  // 4. Deepgram Aura (if key present)
   if (DEEPGRAM_API_KEY) {
     const finalVoiceId = voiceId && voiceId.startsWith("aura-") ? voiceId : "aura-asteria-en";
     console.log(`[TTS] Requesting Deepgram Aura with voice: ${finalVoiceId}`);
-    const response = await fetch(
-      `https://api.deepgram.com/v1/speak?model=${finalVoiceId}&encoding=linear16&sample_rate=8000&container=none`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Token ${DEEPGRAM_API_KEY}`,
-          "content-type": "application/json",
+    try {
+      const response = await fetch(
+        `https://api.deepgram.com/v1/speak?model=${finalVoiceId}&encoding=linear16&sample_rate=8000&container=none`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Token ${DEEPGRAM_API_KEY}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ text }),
+          signal,
         },
-        body: JSON.stringify({ text }),
-        signal,
-      },
-    );
-    if (response.ok) {
-      const arrayBuffer = await response.arrayBuffer();
-      return Buffer.from(arrayBuffer);
-    } else {
-      const errorText = await response.text();
-      throw new Error(`Deepgram Aura API returned ${response.status}: ${errorText}`);
+      );
+      if (response.ok) {
+        const arrayBuffer = await response.arrayBuffer();
+        return Buffer.from(arrayBuffer);
+      } else {
+        const errorText = await response.text();
+        console.warn(`[TTS] Deepgram Aura failed (${response.status}): ${errorText}. Falling back to Edge TTS.`);
+      }
+    } catch (err: any) {
+      console.warn(`[TTS] Deepgram error: ${err.message}. Falling back to Edge TTS.`);
     }
   }
 
-  throw new Error(
-    "No TTS provider available. Please configure DEEPGRAM_API_KEY or ELEVENLABS_API_KEY.",
-  );
+  // 5. Ultimate Fallback: Free Microsoft Edge TTS (guaranteed audio generation)
+  const fallbackVoice = language === "hi-IN" ? "hi-IN-SwaraNeural" : "en-US-JennyNeural";
+  console.log(`[TTS] Using free Edge TTS fallback voice: ${fallbackVoice}`);
+  try {
+    return await getEdgeTtsAudio(text, fallbackVoice, signal);
+  } catch (err: any) {
+    console.error(`[TTS] Ultimate Edge TTS fallback error: ${err.message}`);
+    throw new Error(`TTS audio generation failed: ${err.message}`);
+  }
 }
 
 // Convert raw 8kHz 16-bit linear PCM audio into 8kHz 8-bit mulaw format
