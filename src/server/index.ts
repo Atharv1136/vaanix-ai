@@ -129,24 +129,42 @@ app.get("/health", (_req, res) => {
 // Voice preview (no auth needed — just sample audio)
 app.use(voicePreviewRouter);
 
-// ── Frontend SPA serving ──────────────────────────────────────────────────
-// Serve built static assets from the Vite/TanStack build output.
-// In production the Docker build runs generate-index.mjs to create index.html.
+// ── Frontend Static Assets & SSR Page Proxy ──────────────────────────────
 const staticDir = path.join(process.cwd(), ".output", "public");
 if (existsSync(staticDir)) {
   app.use(express.static(staticDir));
+}
 
-  // Catch-all SPA fallback: serve index.html for all unhandled GET requests
-  app.use((req, res, next) => {
-    if (req.method === "GET" && !req.path.startsWith("/api") && !req.path.startsWith("/webhooks")) {
+// Proxy all non-API GET requests to internal Nitro SSR server running on port 3001
+app.use((req, res, next) => {
+  if (req.method === "GET" && !req.path.startsWith("/api") && !req.path.startsWith("/webhooks")) {
+    const proxyReq = http.request(
+      {
+        host: "127.0.0.1",
+        port: 3001,
+        path: req.url,
+        method: req.method,
+        headers: req.headers,
+      },
+      (proxyRes) => {
+        res.writeHead(proxyRes.statusCode || 200, proxyRes.headers);
+        proxyRes.pipe(res, { end: true });
+      }
+    );
+    proxyReq.on("error", (err) => {
+      console.warn("[Proxy Warning] Nitro SSR fallback failed, serving static fallback:", err.message);
       const indexFile = path.join(staticDir, "index.html");
       if (existsSync(indexFile)) {
-        return res.sendFile(indexFile);
+        res.sendFile(indexFile);
+      } else {
+        res.status(500).send("SSR Server Error");
       }
-    }
-    next();
-  });
-}
+    });
+    req.pipe(proxyReq, { end: true });
+    return;
+  }
+  next();
+});
 
 // Server bootstrap: Express listens directly on primary PORT (e.g. 10000 on Render / 3000 local)
 // so WebSocket upgrade requests to /media-stream are handled natively without proxy drops.
