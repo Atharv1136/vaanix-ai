@@ -4,6 +4,8 @@ dotenv.config();
 
 import express from "express";
 import http from "http";
+import path from "path";
+import { existsSync } from "fs";
 import { WebSocketServer } from "ws";
 
 import { handleTwilioVoiceWebhook } from "./routes/twilioWebhook";
@@ -102,12 +104,28 @@ app.get("/health", (_req, res) => {
 // Voice preview (no auth needed — just sample audio)
 app.use(voicePreviewRouter);
 
+// ── Frontend SPA serving ──────────────────────────────────────────────────
+// Serve built static assets from the Vite/TanStack build output.
+// In production the Docker build runs generate-index.mjs to create index.html.
+const staticDir = path.join(process.cwd(), ".output", "public");
+if (existsSync(staticDir)) {
+  app.use(express.static(staticDir, { index: false }));
+
+  // Catch-all: serve index.html for all non-API/non-webhook GET routes
+  // so that TanStack Router can handle client-side navigation.
+  app.get("*", (_req, res) => {
+    const indexFile = path.join(staticDir, "index.html");
+    if (existsSync(indexFile)) {
+      res.sendFile(indexFile);
+    } else {
+      res.status(503).send("Frontend not built. Run generate-index.mjs after build.");
+    }
+  });
+}
+
 // Server bootstrap
-// In production: nitro (node-server) binds to $PORT (public), Express binds to $BACKEND_PORT (3001, internal).
-// In development: Express binds to $PORT (3000) and Vite dev server proxies /api to it.
-const port = process.env.NODE_ENV === "production"
-  ? (process.env.BACKEND_PORT || 3001)
-  : (process.env.PORT || 3000);
+// Express is the SOLE server — serves API routes + static SPA on PORT.
+const port = process.env.PORT || 3000;
 
 const server = http.createServer(app);
 
