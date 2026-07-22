@@ -1,7 +1,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 1 — Build: install deps & compile frontend + Nitro SSR
 # ─────────────────────────────────────────────────────────────────────────────
-FROM node:20-slim AS builder
+FROM node:22-slim AS builder
 
 WORKDIR /app
 
@@ -33,7 +33,7 @@ RUN sed -i 's/\r$//' start.sh && chmod +x start.sh
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 2 — Runtime: Nitro SSR server + Express backend
 # ─────────────────────────────────────────────────────────────────────────────
-FROM node:20-slim AS runner
+FROM node:22-slim AS runner
 
 WORKDIR /app
 

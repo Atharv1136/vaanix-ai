@@ -1,6 +1,11 @@
 import { Request, Response } from "express";
 import twilio from "twilio";
+import WebSocket from "ws";
 import { supabaseAdmin, getDefaultAssistantId } from "../supabase";
+
+if (typeof (globalThis as any).WebSocket === "undefined") {
+  (globalThis as any).WebSocket = WebSocket;
+}
 
 function getTwilioClient() {
   const accountSid = process.env.TWILIO_ACCOUNT_SID;

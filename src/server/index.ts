@@ -6,7 +6,11 @@ import express from "express";
 import http from "http";
 import path from "path";
 import { existsSync } from "fs";
-import { WebSocketServer } from "ws";
+import WebSocket, { WebSocketServer } from "ws";
+
+if (typeof (globalThis as any).WebSocket === "undefined") {
+  (globalThis as any).WebSocket = WebSocket;
+}
 
 import { handleTwilioVoiceWebhook } from "./routes/twilioWebhook";
 import { handleMediaStream } from "./mediaStream/handler";
