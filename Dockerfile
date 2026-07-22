@@ -24,7 +24,7 @@ RUN bun install
 # Copy full source
 COPY . .
 
-# Build the Vite/TanStack frontend
+# Build the Vite/TanStack frontend + nitro node-server
 RUN bun run build
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -41,13 +41,13 @@ RUN apt-get update && apt-get install -y \
     curl \
   && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Install tsx globally to run the TypeScript server entry point
+# Install tsx globally to run the TypeScript Express server entry point
 RUN npm install -g tsx
 
-# Copy built frontend output
+# Copy built nitro node-server output (frontend SSR)
 COPY --from=builder /app/.output ./.output
 
-# Copy source (server needs TypeScript files at runtime via tsx)
+# Copy source (Express server needs TypeScript files at runtime via tsx)
 COPY --from=builder /app/src ./src
 COPY --from=builder /app/tsconfig.json ./tsconfig.json
 
@@ -55,15 +55,20 @@ COPY --from=builder /app/tsconfig.json ./tsconfig.json
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
 
+# Copy startup script
+COPY --from=builder /app/start.sh ./start.sh
+RUN chmod +x ./start.sh
+
 # Render injects PORT dynamically; default to 3000
 ENV PORT=3000
+ENV BACKEND_PORT=3001
 ENV NODE_ENV=production
 
 EXPOSE 3000
 
-# Healthcheck so Render knows the container is ready
-HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+# Healthcheck via the public nitro port
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
   CMD curl -f http://localhost:3000/health || exit 1
 
-# Start the Express + WebSocket server
-CMD ["tsx", "src/server/index.ts"]
+# start.sh: boots Express (port 3001) then nitro node-server (PORT)
+CMD ["sh", "./start.sh"]

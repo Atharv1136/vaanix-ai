@@ -103,7 +103,12 @@ app.get("/health", (_req, res) => {
 app.use(voicePreviewRouter);
 
 // Server bootstrap
-const port = process.env.PORT || 3000;
+// In production: nitro (node-server) binds to $PORT (public), Express binds to $BACKEND_PORT (3001, internal).
+// In development: Express binds to $PORT (3000) and Vite dev server proxies /api to it.
+const port = process.env.NODE_ENV === "production"
+  ? (process.env.BACKEND_PORT || 3001)
+  : (process.env.PORT || 3000);
+
 const server = http.createServer(app);
 
 // WebSocket server setup sharing the same HTTP port
