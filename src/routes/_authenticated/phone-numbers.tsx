@@ -41,8 +41,11 @@ function PhoneNumbers() {
         .from("phone_numbers")
         .select("*")
         .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
+      if (error) {
+        console.error("Error fetching phone numbers:", error);
+        return [];
+      }
+      return data ?? [];
     },
   });
 
@@ -53,8 +56,11 @@ function PhoneNumbers() {
         .from("assistants")
         .select("id, name")
         .eq("is_published", true);
-      if (error) throw error;
-      return data;
+      if (error) {
+        console.error("Error fetching assistants:", error);
+        return [];
+      }
+      return data ?? [];
     },
   });
 

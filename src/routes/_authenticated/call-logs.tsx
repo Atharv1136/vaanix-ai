@@ -33,7 +33,10 @@ function Logs() {
         .limit(200);
       if (flaggedOnly) query = query.eq("outcome", "flagged");
       const { data, error } = await query;
-      if (error) throw error;
+      if (error) {
+        console.error("Error fetching call logs:", error);
+        return [];
+      }
       return data ?? [];
     },
   });

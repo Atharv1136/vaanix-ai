@@ -16,7 +16,10 @@ function Analytics() {
         .from("common_queries")
         .select("*")
         .order("count", { ascending: false });
-      if (error) throw error;
+      if (error) {
+        console.error("Error fetching common queries:", error);
+        return [];
+      }
       return data ?? [];
     },
   });
@@ -27,7 +30,10 @@ function Analytics() {
       const { data, error } = await supabase
         .from("calls")
         .select("outcome, duration_seconds, started_at");
-      if (error) throw error;
+      if (error) {
+        console.error("Error fetching call stats:", error);
+        return { total: 0, resolved: 0, avgDuration: 0 };
+      }
       const calls = data ?? [];
       const total = calls.length;
       const resolved = calls.filter(c => c.outcome === "resolved").length;

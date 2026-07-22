@@ -22,9 +22,19 @@ import { useState, useEffect } from "react";
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
   beforeLoad: async () => {
-    const { data, error } = await supabase.auth.getUser();
-    if (error || !data.user) throw redirect({ to: "/auth" });
-    return { user: data.user };
+    if (typeof window === "undefined") {
+      return { user: null };
+    }
+    try {
+      const { data } = await supabase.auth.getSession();
+      if (!data.session?.user) {
+        throw redirect({ to: "/auth" });
+      }
+      return { user: data.session.user };
+    } catch (err) {
+      if (err && typeof err === "object" && "to" in err) throw err;
+      return { user: null };
+    }
   },
   component: Layout,
 });
@@ -40,13 +50,24 @@ const nav = [
 ] as const;
 
 function Layout() {
-  const { user } = Route.useRouteContext();
+  const context = Route.useRouteContext();
+  const user = context?.user;
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   const navigate = useNavigate();
   const qc = useQueryClient();
   
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Client-side auth check fallback
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    supabase.auth.getSession().then(({ data }) => {
+      if (!data.session?.user) {
+        navigate({ to: "/auth", replace: true });
+      }
+    });
+  }, [navigate]);
 
   // Close mobile sidebar on route change
   useEffect(() => {
@@ -60,7 +81,8 @@ function Layout() {
     navigate({ to: "/auth", replace: true });
   }
 
-  const userInitial = user.email ? user.email.charAt(0).toUpperCase() : "U";
+  const userEmail = user?.email ?? "User";
+  const userInitial = userEmail.charAt(0).toUpperCase();
 
   // Sidebar contents component for reuse in desktop and mobile drawer
   const SidebarContent = ({ isMobile = false }) => (
@@ -137,7 +159,7 @@ function Layout() {
                 {userInitial}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-xs font-semibold text-slate-100 truncate">{user.email}</div>
+                <div className="text-xs font-semibold text-slate-100 truncate">{userEmail}</div>
                 <div className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Developer</div>
               </div>
             </div>
@@ -156,7 +178,7 @@ function Layout() {
             >
               {userInitial}
               <div className="absolute left-12 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity bg-slate-950 text-xs border border-white/10 rounded-lg px-2.5 py-1.5 shadow-xl whitespace-nowrap z-55">
-                {user.email}
+                {userEmail}
               </div>
             </div>
             <button

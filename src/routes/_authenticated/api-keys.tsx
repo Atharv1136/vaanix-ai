@@ -24,8 +24,11 @@ function ApiKeys() {
     queryKey: ["api_keys"],
     queryFn: async () => {
       const { data, error } = await supabase.from("api_keys").select("*").order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
+      if (error) {
+        console.error("Error fetching API keys:", error);
+        return [];
+      }
+      return data ?? [];
     },
   });
 

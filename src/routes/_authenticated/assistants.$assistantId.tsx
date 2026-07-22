@@ -155,9 +155,14 @@ function AssistantBuilder() {
     queryKey: ["assistant_qas", assistantId],
     queryFn: async () => {
       if (assistantId === "new") return [];
-      const res = await fetch(`/api/assistants/${assistantId}/qas`);
-      if (!res.ok) throw new Error("Failed to load QAs");
-      return res.json();
+      try {
+        const res = await fetch(`/api/assistants/${assistantId}/qas`);
+        if (!res.ok) return [];
+        return await res.json();
+      } catch (err) {
+        console.error("Failed to load QAs:", err);
+        return [];
+      }
     },
     enabled: assistantId !== "new",
   });
@@ -165,24 +170,27 @@ function AssistantBuilder() {
   const { data: assistant, isLoading } = useQuery({
     queryKey: ["assistant", assistantId],
     queryFn: async () => {
-      if (assistantId === "new")
-        return {
-          name: "New Assistant",
-          system_prompt: "",
-          first_message: "",
-          model: "nvidia/nemotron-70b",
-          voice_provider: "deepgram",
-          voice_id: "aura-asteria-en",
-          language: "en-US",
-          is_published: false,
-        };
+      const defaultAss = {
+        name: "New Assistant",
+        system_prompt: "",
+        first_message: "",
+        model: "nvidia/nemotron-70b",
+        voice_provider: "deepgram",
+        voice_id: "aura-asteria-en",
+        language: "en-US",
+        is_published: false,
+      };
+      if (assistantId === "new") return defaultAss;
       const { data, error } = await supabase
         .from("assistants")
         .select("*")
         .eq("id", assistantId)
         .single();
-      if (error) throw error;
-      return data;
+      if (error) {
+        console.error("Error fetching assistant:", error);
+        return defaultAss;
+      }
+      return data ?? defaultAss;
     },
   });
 

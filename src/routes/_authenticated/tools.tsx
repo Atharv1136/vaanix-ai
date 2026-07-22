@@ -54,8 +54,11 @@ function ToolsLibrary() {
     queryKey: ["tools_library"],
     queryFn: async () => {
       const { data, error } = await supabase.from("tools").select("*");
-      if (error) throw error;
-      return data;
+      if (error) {
+        console.error("Error fetching tools:", error);
+        return [];
+      }
+      return data ?? [];
     },
   });
 

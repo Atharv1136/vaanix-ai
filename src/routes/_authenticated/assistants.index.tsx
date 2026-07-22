@@ -37,7 +37,10 @@ function Dashboard() {
         .from("assistants")
         .select("*")
         .order("created_at", { ascending: false });
-      if (error) throw error;
+      if (error) {
+        console.error("Error fetching assistants:", error);
+        return [];
+      }
       return data ?? [];
     },
   });
@@ -51,7 +54,10 @@ function Dashboard() {
         .select("id, student_or_caller_number, started_at, duration_seconds, outcome, assistant_id, assistants(name)")
         .order("started_at", { ascending: false })
         .limit(5);
-      if (error) throw error;
+      if (error) {
+        console.error("Error fetching recent calls:", error);
+        return [];
+      }
       return data ?? [];
     },
   });
