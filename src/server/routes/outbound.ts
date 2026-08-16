@@ -1,18 +1,6 @@
 import { Request, Response } from "express";
-import twilio from "twilio";
-import WebSocket from "ws";
 import { supabaseAdmin, getDefaultAssistantId } from "../supabase";
-
-if (typeof (globalThis as any).WebSocket === "undefined") {
-  (globalThis as any).WebSocket = WebSocket;
-}
-
-function getTwilioClient() {
-  const accountSid = process.env.TWILIO_ACCOUNT_SID;
-  const authToken = process.env.TWILIO_AUTH_TOKEN;
-  if (!accountSid || !authToken) return null;
-  return twilio(accountSid, authToken);
-}
+import { getDynamicTwilioClient } from "../twilioClient";
 
 export let activePublicBaseUrl = "";
 
@@ -28,39 +16,40 @@ export function updatePublicBaseUrl(url: string) {
 }
 
 function normalizePhoneNumber(raw: string): string {
-  const num = raw.trim();
-  if (/^\d{10}$/.test(num)) return "+91" + num; // Indian 10-digit
-  if (/^\d{12}$/.test(num)) return "+" + num; // 12-digit without +
-  if (!num.startsWith("+")) return "+" + num;
-  return num;
-}
+  let str = (raw || "").trim();
+  if (!str) return "";
 
-function buildTwiml(
-  publicBaseUrl: string,
-  callId: string,
-  assistantId: string,
-  contextNote: string,
-): string {
-  const wsHost = publicBaseUrl.replace("https://", "").replace("http://", "");
-  return `
-<Response>
-  <Connect>
-    <Stream url="wss://${wsHost}/media-stream">
-      <Parameter name="assistant_id" value="${assistantId}" />
-      <Parameter name="call_record_id" value="${callId}" />
-      <Parameter name="context_note" value="${contextNote}" />
-    </Stream>
-  </Connect>
-</Response>`.trim();
+  // Handle scientific notation (e.g. 9.19562E+11, 9.19562e11)
+  if (/^[+\-]?\d+(\.\d+)?[eE][+\-]?\d+$/.test(str)) {
+    const num = Number(str);
+    if (!isNaN(num)) {
+      str = Math.round(num).toString();
+    }
+  }
+
+  const hasPlus = str.startsWith("+");
+  const digitsOnly = str.replace(/\D/g, "");
+
+  if (!digitsOnly) return str;
+
+  if (digitsOnly.length === 10) {
+    return "+91" + digitsOnly;
+  }
+  if (digitsOnly.length === 12 && digitsOnly.startsWith("91")) {
+    return "+" + digitsOnly;
+  }
+  if (hasPlus) {
+    return "+" + digitsOnly;
+  }
+  return "+" + digitsOnly;
 }
 
 // POST /api/outbound/call — single outbound call
 export async function handleSingleOutboundCall(req: Request, res: Response): Promise<void> {
   const { student_number, line_id, context_note, caller_name } = req.body;
 
-  const twilioPhoneNumber = process.env.TWILIO_PHONE_NUMBER;
   const publicBaseUrl = getPublicBaseUrl();
-  const twilioClient = getTwilioClient();
+  const { client: twilioClient, credentials } = await getDynamicTwilioClient();
 
   // Validate required params
   if (!student_number) {
@@ -71,24 +60,20 @@ export async function handleSingleOutboundCall(req: Request, res: Response): Pro
     res
       .status(500)
       .json({
-        error: "Twilio credentials not configured (TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN).",
+        error: "Telephony credentials not configured. Please configure Twilio or Plivo in Settings.",
       });
-    return;
-  }
-  if (!twilioPhoneNumber) {
-    res.status(500).json({ error: "TWILIO_PHONE_NUMBER is missing in .env file." });
     return;
   }
   if (!publicBaseUrl) {
     res
       .status(500)
-      .json({ error: "PUBLIC_BASE_URL is missing. Add your tunnel URL to .env (e.g. ngrok)." });
+      .json({ error: "PUBLIC_BASE_URL is missing. Add your tunnel URL to configuration." });
     return;
   }
 
   try {
     // Resolve phone line and assistant from phone_numbers table
-    let fromNumber = twilioPhoneNumber;
+    let fromNumber = credentials.phoneNumber || process.env.TWILIO_PHONE_NUMBER || "";
     let assistantId = "";
 
     if (line_id) {
@@ -99,7 +84,7 @@ export async function handleSingleOutboundCall(req: Request, res: Response): Pro
         .maybeSingle();
 
       if (line) {
-        fromNumber = line.phone_number;
+        if (line.phone_number) fromNumber = line.phone_number;
         assistantId = line.assistant_id || "";
       }
     }
@@ -150,7 +135,6 @@ export async function handleSingleOutboundCall(req: Request, res: Response): Pro
       return;
     }
 
-    // Initiate Twilio call using URL instead of twiml — so Twilio fetches TwiML from our server
     const twilioCall = await twilioClient.calls.create({
       to: cleanNumber,
       from: fromNumber,
@@ -173,26 +157,25 @@ export async function handleSingleOutboundCall(req: Request, res: Response): Pro
 export async function handleOutboundBatch(req: Request, res: Response): Promise<void> {
   const { student_numbers, line_id, context_note } = req.body;
 
-  const twilioPhoneNumber = process.env.TWILIO_PHONE_NUMBER;
   const publicBaseUrl = getPublicBaseUrl();
-  const twilioClient = getTwilioClient();
+  const { client: twilioClient, credentials } = await getDynamicTwilioClient();
 
   if (!student_numbers || !Array.isArray(student_numbers) || student_numbers.length === 0) {
     res.status(400).json({ error: "Missing required parameter: student_numbers (array)." });
     return;
   }
   if (!twilioClient) {
-    res.status(500).json({ error: "Twilio credentials not configured." });
+    res.status(500).json({ error: "Telephony credentials not configured." });
     return;
   }
-  if (!twilioPhoneNumber || !publicBaseUrl) {
-    res.status(500).json({ error: "Missing TWILIO_PHONE_NUMBER or PUBLIC_BASE_URL in .env." });
+  if (!publicBaseUrl) {
+    res.status(500).json({ error: "Missing PUBLIC_BASE_URL in configuration." });
     return;
   }
 
   try {
     // Resolve line
-    let fromNumber = twilioPhoneNumber;
+    let fromNumber = credentials.phoneNumber || process.env.TWILIO_PHONE_NUMBER || "";
     let assistantId = "";
 
     if (line_id) {
@@ -202,7 +185,7 @@ export async function handleOutboundBatch(req: Request, res: Response): Promise<
         .eq("id", line_id)
         .maybeSingle();
       if (line) {
-        fromNumber = line.phone_number;
+        if (line.phone_number) fromNumber = line.phone_number;
         assistantId = line.assistant_id || "";
       }
     }

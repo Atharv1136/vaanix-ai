@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import twilio from "twilio";
 import { getPhoneNumber, createCallRecord, getDefaultAssistantId } from "../supabase";
+import { getPublicBaseUrl } from "./outbound";
 
 export async function handleTwilioVoiceWebhook(req: Request, res: Response): Promise<void> {
   const { To, From, CallSid, Direction } = req.body;
@@ -63,14 +64,19 @@ export async function handleTwilioVoiceWebhook(req: Request, res: Response): Pro
       );
     }
 
-    // 4. Return TwiML response to open WebSocket media stream link
+    // Return TwiML response to open WebSocket media stream link
     const response = new twilio.twiml.VoiceResponse();
-    // We don't want a long generic greeting here because the Assistant's `first_message` will be spoken via the websocket connection.
-    // So we just connect the stream immediately.
     const connect = response.connect();
 
+    const hostHeader = req.headers.host;
+    const publicBaseUrl = getPublicBaseUrl() || (hostHeader ? `https://${hostHeader}` : process.env.PUBLIC_BASE_URL || "");
+    const rawHost = (hostHeader || publicBaseUrl || "localhost:3000").replace(/^https?:\/\//, "");
+    const streamUrl = `wss://${rawHost}/media-stream`;
+
+    console.log(`[TwilioWebhook] Connecting media stream to: ${streamUrl}`);
+
     const stream = connect.stream({
-      url: `wss://${req.headers.host}/media-stream`,
+      url: streamUrl,
     });
 
     stream.parameter({

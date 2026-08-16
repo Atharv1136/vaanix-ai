@@ -1,9 +1,11 @@
 import { createFileRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { Input } from "@/components/ui/input";
+import { Trash2 } from "lucide-react";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/call-logs")({
   component: Logs,
@@ -18,6 +20,7 @@ function badge(outcome: string, flagged: boolean) {
 }
 
 function Logs() {
+  const qc = useQueryClient();
   const [flaggedOnly, setFlaggedOnly] = useState(false);
   const [q, setQ] = useState("");
   const pathname = useRouterState({ select: (r) => r.location.pathname });
@@ -40,6 +43,14 @@ function Logs() {
       return data ?? [];
     },
   });
+
+  async function deleteCall(id: string) {
+    if (!confirm("Are you sure you want to delete this call log?")) return;
+    const { error } = await supabase.from("calls").delete().eq("id", id);
+    if (error) return toast.error(error.message);
+    toast.success("Call log deleted");
+    qc.invalidateQueries();
+  }
 
   const filtered = rows.filter((r: any) => r.student_or_caller_number?.includes(q));
 
@@ -67,7 +78,7 @@ function Logs() {
               <th className="px-4 py-2.5 font-medium">Student</th>
               <th className="px-4 py-2.5 font-medium">Duration</th>
               <th className="px-4 py-2.5 font-medium">Outcome</th>
-              <th className="px-4 py-2.5" />
+              <th className="px-4 py-2.5 text-right font-medium">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -95,10 +106,17 @@ function Logs() {
                 <td className="px-4 py-2.5 text-foreground">{(c as any).student_or_caller_number}</td>
                 <td className="px-4 py-2.5 text-muted-foreground">{(c as any).duration_seconds ?? 0}s</td>
                 <td className="px-4 py-2.5">{badge((c as any).outcome, false)}</td>
-                <td className="px-4 py-2.5 text-right">
+                <td className="px-4 py-2.5 text-right flex items-center justify-end gap-3">
                   <Link to="/call-logs/$callId" params={{ callId: c.id }} className="text-xs text-primary hover:underline">
                     View transcript
                   </Link>
+                  <button
+                    onClick={() => deleteCall(c.id)}
+                    title="Delete Call Log"
+                    className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                 </td>
               </motion.tr>
             ))}

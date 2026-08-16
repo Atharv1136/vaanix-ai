@@ -557,9 +557,22 @@ export function handleMediaStream(ws: WebSocket) {
                 }
               } catch (err: any) {
                 if (err.name === "AbortError" || turnController.signal.aborted) {
-                  console.log("[MediaStream] Turn aborted.");
-                } else {
-                  console.error("[MediaStream] Turn error (call remains active):", err?.message || err);
+                  console.warn(`[MediaStream] Non-fatal turn error for call ${callSid}:`, err?.message || err);
+                  try {
+                    const fallbackMsg = "I'm sorry, I didn't quite catch that. Could you please repeat?";
+                    const pcmBuffer = await getElevenLabsVoiceStream(
+                      fallbackMsg,
+                      assistant?.voice_id,
+                      undefined,
+                      (assistant as any)?.language,
+                    );
+                    if (!callEnded) {
+                      sendAudioToTwilio(ws, streamSid, pcmBuffer);
+                      await saveCallTranscriptTurn(callSid, "ai", fallbackMsg, turnIndex++);
+                    }
+                  } catch (speechErr) {
+                    console.warn("[MediaStream] Fallback speech error:", speechErr);
+                  }
                 }
               }
             },

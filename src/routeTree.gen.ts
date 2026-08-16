@@ -15,6 +15,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as AuthenticatedAnalyticsRouteImport } from './routes/_authenticated/analytics'
 import { Route as AuthenticatedApiKeysRouteImport } from './routes/_authenticated/api-keys'
+import { Route as AuthenticatedBulkCallsRouteImport } from './routes/_authenticated/bulk-calls'
 import { Route as AuthenticatedCallLogsRouteImport } from './routes/_authenticated/call-logs'
 import { Route as AuthenticatedPhoneNumbersRouteImport } from './routes/_authenticated/phone-numbers'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
@@ -50,6 +51,11 @@ const AuthenticatedAnalyticsRoute = AuthenticatedAnalyticsRouteImport.update({
 const AuthenticatedApiKeysRoute = AuthenticatedApiKeysRouteImport.update({
   id: '/api-keys',
   path: '/api-keys',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedBulkCallsRoute = AuthenticatedBulkCallsRouteImport.update({
+  id: '/bulk-calls',
+  path: '/bulk-calls',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedCallLogsRoute = AuthenticatedCallLogsRouteImport.update({
@@ -98,6 +104,7 @@ export interface FileRoutesByFullPath {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/api-keys': typeof AuthenticatedApiKeysRoute
+  '/bulk-calls': typeof AuthenticatedBulkCallsRoute
   '/call-logs': typeof AuthenticatedCallLogsRouteWithChildren
   '/phone-numbers': typeof AuthenticatedPhoneNumbersRoute
   '/settings': typeof AuthenticatedSettingsRoute
@@ -112,6 +119,7 @@ export interface FileRoutesByTo {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/api-keys': typeof AuthenticatedApiKeysRoute
+  '/bulk-calls': typeof AuthenticatedBulkCallsRoute
   '/call-logs': typeof AuthenticatedCallLogsRouteWithChildren
   '/phone-numbers': typeof AuthenticatedPhoneNumbersRoute
   '/settings': typeof AuthenticatedSettingsRoute
@@ -128,6 +136,7 @@ export interface FileRoutesById {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/_authenticated/analytics': typeof AuthenticatedAnalyticsRoute
   '/_authenticated/api-keys': typeof AuthenticatedApiKeysRoute
+  '/_authenticated/bulk-calls': typeof AuthenticatedBulkCallsRoute
   '/_authenticated/call-logs': typeof AuthenticatedCallLogsRouteWithChildren
   '/_authenticated/phone-numbers': typeof AuthenticatedPhoneNumbersRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
@@ -144,6 +153,7 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/analytics'
     | '/api-keys'
+    | '/bulk-calls'
     | '/call-logs'
     | '/phone-numbers'
     | '/settings'
@@ -158,6 +168,7 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/analytics'
     | '/api-keys'
+    | '/bulk-calls'
     | '/call-logs'
     | '/phone-numbers'
     | '/settings'
@@ -173,6 +184,7 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/_authenticated/analytics'
     | '/_authenticated/api-keys'
+    | '/_authenticated/bulk-calls'
     | '/_authenticated/call-logs'
     | '/_authenticated/phone-numbers'
     | '/_authenticated/settings'
@@ -231,6 +243,13 @@ declare module '@tanstack/react-router' {
       path: '/api-keys'
       fullPath: '/api-keys'
       preLoaderRoute: typeof AuthenticatedApiKeysRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/bulk-calls': {
+      id: '/_authenticated/bulk-calls'
+      path: '/bulk-calls'
+      fullPath: '/bulk-calls'
+      preLoaderRoute: typeof AuthenticatedBulkCallsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/call-logs': {
@@ -301,6 +320,7 @@ const AuthenticatedCallLogsRouteWithChildren =
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedAnalyticsRoute: typeof AuthenticatedAnalyticsRoute
   AuthenticatedApiKeysRoute: typeof AuthenticatedApiKeysRoute
+  AuthenticatedBulkCallsRoute: typeof AuthenticatedBulkCallsRoute
   AuthenticatedCallLogsRoute: typeof AuthenticatedCallLogsRouteWithChildren
   AuthenticatedPhoneNumbersRoute: typeof AuthenticatedPhoneNumbersRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
@@ -312,6 +332,7 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAnalyticsRoute: AuthenticatedAnalyticsRoute,
   AuthenticatedApiKeysRoute: AuthenticatedApiKeysRoute,
+  AuthenticatedBulkCallsRoute: AuthenticatedBulkCallsRoute,
   AuthenticatedCallLogsRoute: AuthenticatedCallLogsRouteWithChildren,
   AuthenticatedPhoneNumbersRoute: AuthenticatedPhoneNumbersRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,

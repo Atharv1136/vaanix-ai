@@ -12,6 +12,8 @@ if (typeof (globalThis as any).WebSocket === "undefined") {
   (globalThis as any).WebSocket = WebSocket;
 }
 
+import { supabaseAdmin, getDefaultAssistantId, setDefaultAssistantId } from "./supabase";
+
 import { handleTwilioVoiceWebhook } from "./routes/twilioWebhook";
 import { handleMediaStream } from "./mediaStream/handler";
 import { handleTTSPreview } from "./routes/ttsPreview";
@@ -45,7 +47,18 @@ import {
   handleBulkSaveQAs,
 } from "./routes/assistantQas";
 import { voicePreviewRouter } from "./routes/voicePreview";
-import { getDefaultAssistantId, setDefaultAssistantId } from "./supabase";
+import {
+  handleBulkCampaignStart,
+  handleBulkCampaignPause,
+  handleBulkCampaignResume,
+  handleBulkCampaignRetryFailed,
+  handleBulkCallStatus,
+} from "./routes/bulkCampaign";
+import {
+  handleGenerateCallSummary,
+  handleTestAiKey,
+  handleGetKeyPoolStats,
+} from "./routes/analyticsRoutes";
 
 const app = express();
 app.use(express.urlencoded({ extended: true }));
@@ -76,6 +89,11 @@ app.post("/api/voice-token", handleVoiceToken);
 app.post("/api/tts/preview", handleTTSPreview);
 app.post("/api/outbound/start", handleOutboundBatch);
 app.post("/api/outbound/call", handleSingleOutboundCall);
+app.post("/api/outbound/bulk/start", handleBulkCampaignStart);
+app.post("/api/outbound/bulk/pause", handleBulkCampaignPause);
+app.post("/api/outbound/bulk/resume", handleBulkCampaignResume);
+app.post("/api/outbound/bulk/retry-failed", handleBulkCampaignRetryFailed);
+app.post("/api/outbound/bulk/call-status", handleBulkCallStatus);
 app.post("/api/calls/:id/end", handleEndCall);
 
 // Assistants API (protected by API Key)
@@ -125,6 +143,11 @@ app.post("/api/settings/default-agent", async (req, res) => {
 app.get("/health", (_req, res) => {
   res.status(200).send("OK");
 });
+
+// Analytics + AI Key Pool routes
+app.post("/api/analytics/call-summary/:callId", handleGenerateCallSummary);
+app.post("/api/analytics/test-key", handleTestAiKey);
+app.get("/api/analytics/key-pool-stats", handleGetKeyPoolStats);
 
 // Voice preview (no auth needed — just sample audio)
 app.use(voicePreviewRouter);
@@ -227,6 +250,37 @@ server.on("upgrade", (request, socket, head) => {
     socket.destroy();
   }
 });
+
+// Startup auto-cleanup: sanitize orphaned in_progress calls and stale campaigns
+(async () => {
+  try {
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    await (supabaseAdmin as any)
+      .from("calls")
+      .update({ outcome: "resolved", ended_at: new Date().toISOString() })
+      .eq("outcome", "in_progress")
+      .lt("started_at", fiveMinutesAgo);
+
+    const { data: camps } = await (supabaseAdmin as any)
+      .from("bulk_call_campaigns")
+      .select("id, total_contacts, called_count")
+      .eq("status", "running");
+
+    if (camps) {
+      for (const c of camps) {
+        if (c.total_contacts > 0 && c.called_count >= c.total_contacts) {
+          await (supabaseAdmin as any)
+            .from("bulk_call_campaigns")
+            .update({ status: "completed", completed_at: new Date().toISOString() })
+            .eq("id", c.id);
+        }
+      }
+    }
+    console.log("[Server] Telephony state sanitized on boot.");
+  } catch (err: any) {
+    console.warn("[Server] Startup sanitation notice:", err.message);
+  }
+})();
 
 server.listen(port, () => {
   console.log(`[Server] CampusConnect persistent leg listening on port ${port}`);

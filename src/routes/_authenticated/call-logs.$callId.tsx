@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Flag } from "lucide-react";
+import { X, Flag, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/call-logs/$callId")({
@@ -24,6 +24,15 @@ function TranscriptPanel() {
       return { call, turns: turns ?? [] };
     },
   });
+
+  async function deleteThisCall() {
+    if (!confirm("Are you sure you want to delete this call log?")) return;
+    const { error } = await supabase.from("calls").delete().eq("id", callId);
+    if (error) return toast.error(error.message);
+    toast.success("Call log deleted");
+    qc.invalidateQueries();
+    close();
+  }
 
   async function flagTurn() {
     if (!data?.call) return;
@@ -79,13 +88,22 @@ function TranscriptPanel() {
               <div className="text-sm font-semibold text-foreground">Call transcript</div>
               {data?.call && (
                 <div className="text-xs text-muted-foreground">
-                  {data.call.student_number} · {new Date(data.call.started_at).toLocaleString()}
+                  {(data.call as any).student_or_caller_number || (data.call as any).student_number} · {new Date(data.call.started_at).toLocaleString()}
                 </div>
               )}
             </div>
-            <button onClick={close} className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
-              <X className="h-4 w-4" />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={deleteThisCall}
+                title="Delete Call Log"
+                className="rounded-md p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+              <button onClick={close} className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
           </div>
 
           <div className="flex-1 space-y-3 overflow-y-auto px-5 py-4">

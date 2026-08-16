@@ -52,10 +52,36 @@
 | FAIL-01 | Phase 1 | Pending |
 | FAIL-02 | Phase 1 | Pending |
 
-**Coverage:**
-- v1 requirements: 15 total
-- Mapped to phases: 15
-- Unmapped: 0
+## v2 Requirements (Milestone 3)
+
+### Bulk Calling
+- [x] **BULK-01**: Download Excel/CSV template with Name + Phone Number columns.
+- [x] **BULK-02**: Upload CSV/Excel and parse contacts client-side with preview table.
+- [x] **BULK-03**: Create campaign (name, agent, phone line) and trigger sequential calls.
+- [x] **BULK-04**: `bulk_call_campaigns` + `bulk_call_contacts` DB tables with RLS.
+- [x] **BULK-05**: Server: `POST /api/outbound/bulk/start` starts campaign, fires calls sequentially.
+- [x] **BULK-06**: Server: `POST /api/outbound/bulk/call-status` Twilio callback advances to next contact.
+- [x] **BULK-07**: Simulation fallback when Twilio not configured (for demo/testing).
+- [x] **BULK-08**: Live progress polling (5s interval) on campaign list page.
+
+### Agent Analytics Dashboard
+- [x] **ANALY-01**: Analytics page shows all agent cards with call counts + success rate.
+- [x] **ANALY-02**: Click agent → per-agent dashboard: Total/Resolved/Forwarded/Flagged/Rate/AvgDur stat cards.
+- [x] **ANALY-03**: 14-day bar chart of calls per day on agent dashboard.
+- [x] **ANALY-04**: Per-agent call list table (all calls, clickable).
+- [x] **ANALY-05**: Click call → detail overlay with AI summary banner + metadata grid + full transcript.
+- [x] **ANALY-06**: `POST /api/analytics/call-summary/:callId` generates AI summary via key pool.
+- [x] **ANALY-07**: `ai_summary` + `call_sentiment` columns added to `calls` table.
+
+### BYOK AI API Key Pool
+- [x] **BYOK-01**: `ai_provider_keys` DB table (provider, label, api_key, priority, usage, cost).
+- [x] **BYOK-02**: Settings page: Add AI Key modal with provider selector (7 providers).
+- [x] **BYOK-03**: Priority ordering with up/down controls.
+- [x] **BYOK-04**: Active/Inactive toggle per key.
+- [x] **BYOK-05**: Test Key button hits `POST /api/analytics/test-key`.
+- [x] **BYOK-06**: Cumulative stats bar: total keys, tokens used, estimated spend.
+- [x] **BYOK-07**: `aiKeyPool.ts` service: priority-ordered fallback chain for all AI calls.
+- [x] **BYOK-08**: Cost estimation per provider stored in DB after each LLM call.
 
 ---
-*Requirements defined: 2026-07-18*
+*Requirements updated: 2026-08-11 — Milestone 3 complete*
