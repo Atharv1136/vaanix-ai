@@ -282,6 +282,37 @@ server.on("upgrade", (request, socket, head) => {
   }
 })();
 
+// ── AI Key Health Check ────────────────────────────────────────────────────────
+// Warn loudly at startup if no working AI provider keys are configured.
+// This prevents the "brief connection difficulty" error from silently manifesting
+// during live calls — instead it surfaces immediately in server logs.
+(async () => {
+  try {
+    const { getCandidateKeys } = await import("./services/aiKeyPool");
+    const keys = await getCandidateKeys();
+    if (keys.length === 0) {
+      console.error(
+        "\n╔══════════════════════════════════════════════════════════════╗\n" +
+        "║  ⚠️  WARNING: No AI Provider Keys configured!                ║\n" +
+        "║  Calls will say \"brief connection difficulty\" and hang.      ║\n" +
+        "║                                                              ║\n" +
+        "║  Fix: Add one of these to your .env or Render dashboard:    ║\n" +
+        "║    GROQ_API_KEY=gsk_...     (free, fastest — recommended)   ║\n" +
+        "║    GEMINI_API_KEY=AIza...   (free 15 RPM)                   ║\n" +
+        "║    TOGETHER_API_KEY=...     ($1 free credit)                ║\n" +
+        "║    NVIDIA_API_KEY=nvapi-... (if you have a valid new key)   ║\n" +
+        "║                                                              ║\n" +
+        "║  Or add keys via dashboard: Settings → AI Provider Keys     ║\n" +
+        "╚══════════════════════════════════════════════════════════════╝\n"
+      );
+    } else {
+      console.log(`[Server] AI key pool ready: ${keys.length} key(s) available (first: ${keys[0].provider}/${keys[0].label})`);
+    }
+  } catch (err: any) {
+    console.warn("[Server] AI key health check skipped:", err.message);
+  }
+})();
+
 server.listen(port, () => {
   console.log(`[Server] CampusConnect persistent leg listening on port ${port}`);
 });

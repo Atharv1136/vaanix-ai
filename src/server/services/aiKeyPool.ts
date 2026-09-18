@@ -66,7 +66,7 @@ export const DEFAULT_MODELS: Record<string, string> = {
   gemini:     "gemini-1.5-flash",
   openai:     "gpt-4o-mini",
   anthropic:  "claude-3-haiku-20240307",
-  groq:       "llama-3.1-8b-instant",
+  groq:       "openai/gpt-oss-20b",
   openrouter: "openai/gpt-4o-mini",
   together:   "meta-llama/Llama-3-8b-chat-hf",
   nvidia:     "meta/llama-3.1-8b-instruct",
@@ -114,11 +114,70 @@ async function recordUsage(keyId: string, tokens: number, costUsd: number): Prom
 
 /**
  * Build a list of candidate keys including system .env fallbacks.
+ *
+ * Priority order for .env system keys (lower number = tried first):
+ *   990 Groq       (fastest, generous free tier)
+ *   991 Gemini     (free tier 15 RPM)
+ *   992 Together   ($1 free credit)
+ *   999 NVIDIA     (kept last — may be expired; replaced by above)
+ *
+ * To activate any of these, add the corresponding env var to .env or
+ * the production environment (e.g. Render dashboard).
  */
 export async function getCandidateKeys(explicitKeys?: AiProviderKey[]): Promise<AiProviderKey[]> {
   const activeKeys = [...(explicitKeys ?? (await getActiveKeys()))];
 
+  // Only inject .env system fallbacks when no user-configured BYOK keys exist
   if (activeKeys.length === 0) {
+    // ── Groq fallback (recommended: fast, free, OpenAI-compatible) ──────────
+    if (process.env.GROQ_API_KEY) {
+      activeKeys.push({
+        id: "env-groq-key",
+        provider: "groq",
+        label: "System Groq Key (.env)",
+        api_key: process.env.GROQ_API_KEY,
+        base_url: "https://api.groq.com/openai/v1",
+        model_override: "openai/gpt-oss-20b",
+        is_active: true,
+        priority: 990,
+        estimated_tokens_used: 0,
+        estimated_cost_usd: 0,
+      });
+    }
+
+    // ── Google Gemini fallback (free tier: 15 RPM) ───────────────────────────
+    if (process.env.GEMINI_API_KEY) {
+      activeKeys.push({
+        id: "env-gemini-key",
+        provider: "gemini",
+        label: "System Gemini Key (.env)",
+        api_key: process.env.GEMINI_API_KEY,
+        base_url: "https://generativelanguage.googleapis.com/v1beta/openai",
+        model_override: "gemini-1.5-flash",
+        is_active: true,
+        priority: 991,
+        estimated_tokens_used: 0,
+        estimated_cost_usd: 0,
+      });
+    }
+
+    // ── Together AI fallback ─────────────────────────────────────────────────
+    if (process.env.TOGETHER_API_KEY) {
+      activeKeys.push({
+        id: "env-together-key",
+        provider: "together",
+        label: "System Together AI Key (.env)",
+        api_key: process.env.TOGETHER_API_KEY,
+        base_url: "https://api.together.xyz/v1",
+        model_override: "meta-llama/Llama-3-8b-chat-hf",
+        is_active: true,
+        priority: 992,
+        estimated_tokens_used: 0,
+        estimated_cost_usd: 0,
+      });
+    }
+
+    // ── NVIDIA NIM fallback (kept for backwards compatibility) ───────────────
     if (process.env.NVIDIA_API_KEY) {
       activeKeys.push({
         id: "env-nvidia-key",
@@ -133,7 +192,18 @@ export async function getCandidateKeys(explicitKeys?: AiProviderKey[]): Promise<
         estimated_cost_usd: 0,
       });
     }
+
+    if (activeKeys.length === 0) {
+      console.warn(
+        "[AiKeyPool] ⚠️  No AI provider keys found! " +
+        "Add keys via Settings → AI Provider Keys, or set one of these .env vars: " +
+        "GROQ_API_KEY, GEMINI_API_KEY, TOGETHER_API_KEY, NVIDIA_API_KEY"
+      );
+    }
   }
+
+  // Sort by priority ascending so lowest-priority-number key is tried first
+  activeKeys.sort((a, b) => a.priority - b.priority);
 
   return activeKeys;
 }
