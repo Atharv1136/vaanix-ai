@@ -7,7 +7,7 @@ import {
   deleteAssistantQAs,
   saveAssistantQAs,
 } from "../supabase";
-import { getClient } from "../nvidia";
+import { completionWithFallback } from "../services/aiKeyPool";
 
 // GET /api/assistants/:assistantId/qas
 export async function handleGetQAs(req: Request, res: Response): Promise<void> {
@@ -35,7 +35,6 @@ export async function handleGenerateQAs(req: Request, res: Response): Promise<vo
 
     const kbDocs = await getAssistantKBDocuments(assistantId);
 
-    const openai = getClient();
     const systemPrompt = `You are a professional QA training assistant. Your job is to analyze the AI assistant configuration (System Prompt) and its Knowledge Base Documents to generate a JSON array of up to 50 commonly asked questions and their short, direct, spoken answers.
     
 Rules for generation:
@@ -65,18 +64,13 @@ ${kbDocs.length > 0 ? kbDocs.map((d) => `--- ${d.title} ---\n${d.content}`).join
 
     console.log(`[QAs] Generating QAs for assistant ${assistantId}...`);
 
-    // Call NVIDIA NIM Model
-    const completion = await openai.chat.completions.create({
-      model: "nvidia/llama-3.3-nemotron-super-49b-v1",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userMessage },
-      ],
-      temperature: 0.5,
-      max_tokens: 4000,
-    });
+    // Call AI Key Pool with automatic fallback across providers
+    const completion = await completionWithFallback([
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userMessage },
+    ]);
 
-    let content = completion.choices[0]?.message?.content || "";
+    let content = completion.text || "";
 
     // Clean codeblock wrapper if LLM returned it
     content = content

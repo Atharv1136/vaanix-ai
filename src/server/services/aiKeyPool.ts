@@ -66,7 +66,7 @@ export const DEFAULT_MODELS: Record<string, string> = {
   gemini:     "gemini-1.5-flash",
   openai:     "gpt-4o-mini",
   anthropic:  "claude-3-haiku-20240307",
-  groq:       "groq/compound-mini",
+  groq:       "qwen/qwen3.8-27b",
   openrouter: "openai/gpt-4o-mini",
   together:   "meta-llama/Llama-3-8b-chat-hf",
   nvidia:     "meta/llama-3.1-8b-instruct",
@@ -137,7 +137,7 @@ export async function getCandidateKeys(explicitKeys?: AiProviderKey[]): Promise<
         label: "System Groq Key (.env)",
         api_key: process.env.GROQ_API_KEY,
         base_url: "https://api.groq.com/openai/v1",
-        model_override: "groq/compound-mini",
+        model_override: "qwen/qwen3.8-27b",
         is_active: true,
         priority: 990,
         estimated_tokens_used: 0,
@@ -425,7 +425,27 @@ CRITICAL INSTRUCTION: You are on a live telephone call. Keep your reply to 1-2 s
     if (signal?.aborted) return;
 
     const baseUrl = key.base_url || PROVIDER_BASE_URLS[key.provider] || PROVIDER_BASE_URLS.openai;
-    const model = key.model_override || DEFAULT_MODELS[key.provider] || "gpt-4o-mini";
+    
+    // Determine the model to use:
+    // 1. Key model_override if explicitly set
+    // 2. Assistant model if compatible with this provider
+    // 3. Provider default model
+    let model = key.model_override;
+    if (!model && assistant?.model) {
+      const am = assistant.model.toLowerCase();
+      if (key.provider === "groq" && (am.startsWith("qwen/") || am.startsWith("openai/") || am.startsWith("groq/"))) {
+        model = assistant.model;
+      } else if (key.provider === "nvidia" && (am.startsWith("nvidia/") || am.startsWith("meta/") || am.startsWith("mistralai/"))) {
+        model = assistant.model;
+      } else if (key.provider === "openai" && (am.startsWith("gpt-") || am.startsWith("o1") || am.startsWith("o3"))) {
+        model = assistant.model;
+      } else if (key.provider === "gemini" && am.startsWith("gemini")) {
+        model = assistant.model;
+      }
+    }
+    if (!model) {
+      model = DEFAULT_MODELS[key.provider] || "gpt-4o-mini";
+    }
 
     console.log(`[AiKeyPool] Attempting live call streaming with ${key.provider} (${key.label}) [model: ${model}]`);
 
@@ -445,18 +465,44 @@ CRITICAL INSTRUCTION: You are on a live telephone call. Keep your reply to 1-2 s
 
       while (!finalResponseComplete && loopCount < 4) {
         loopCount++;
-        const stream = await client.chat.completions.create(
-          {
-            model,
-            messages,
-            tools: openAiTools.length > 0 ? openAiTools : undefined,
-            tool_choice: openAiTools.length > 0 ? "auto" : undefined,
-            max_tokens: 180,
-            temperature: 0.4,
-            stream: true,
-          },
-          { signal },
-        );
+        let stream;
+        try {
+          stream = await client.chat.completions.create(
+            {
+              model,
+              messages,
+              tools: openAiTools.length > 0 ? openAiTools : undefined,
+              tool_choice: openAiTools.length > 0 ? "auto" : undefined,
+              max_tokens: 180,
+              temperature: 0.4,
+              stream: true,
+            },
+            { signal },
+          );
+        } catch (streamInitErr: any) {
+          // If the model does not support tool calling (e.g. Groq 400 'tool calling is not supported'),
+          // gracefully retry immediately without tools so live telephone calls NEVER crash or hang.
+          const isToolError =
+            openAiTools.length > 0 &&
+            (streamInitErr?.message?.toLowerCase().includes("tool") ||
+              streamInitErr?.status === 400);
+
+          if (isToolError && !signal?.aborted) {
+            console.warn(`[AiKeyPool] Model "${model}" rejected tool calling (${streamInitErr.message}). Retrying immediately without tools…`);
+            stream = await client.chat.completions.create(
+              {
+                model,
+                messages,
+                max_tokens: 180,
+                temperature: 0.4,
+                stream: true,
+              },
+              { signal },
+            );
+          } else {
+            throw streamInitErr;
+          }
+        }
 
         let currentText = "";
         let toolCalls: { id: string; name: string; args: string }[] = [];

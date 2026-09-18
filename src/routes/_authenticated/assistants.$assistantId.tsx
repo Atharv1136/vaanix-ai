@@ -35,10 +35,14 @@ export const Route = createFileRoute("/_authenticated/assistants/$assistantId")(
   component: AssistantBuilder,
 });
 
-// NVIDIA NIM models available
+// AI models available
 const MODELS = [
-  { value: "nvidia/nemotron-70b", label: "Nemotron 70B (Recommended)", badge: "NVIDIA" },
-  { value: "nvidia/nemotron-mini", label: "Nemotron Nano 8B (Fast)", badge: "NVIDIA" },
+  { value: "qwen/qwen3.8-27b", label: "Qwen 2.5 27B (Recommended)", badge: "Groq" },
+  { value: "openai/gpt-oss-20b", label: "GPT-OSS 20B (Fast)", badge: "Groq" },
+  { value: "gemini-1.5-flash", label: "Gemini 1.5 Flash", badge: "Google" },
+  { value: "gpt-4o-mini", label: "GPT-4o Mini", badge: "OpenAI" },
+  { value: "nvidia/nemotron-70b", label: "Nemotron 70B", badge: "NVIDIA" },
+  { value: "nvidia/nemotron-mini", label: "Nemotron Nano 8B", badge: "NVIDIA" },
   { value: "meta/llama-3.3-70b", label: "Llama 3.3 70B Instruct", badge: "Meta" },
   { value: "meta/llama-3.1-8b", label: "Llama 3.1 8B Instruct (Fast)", badge: "Meta" },
   { value: "mistralai/mistral-7b", label: "Mistral 7B Instruct", badge: "Mistral" },
@@ -174,7 +178,7 @@ function AssistantBuilder() {
         name: "New Assistant",
         system_prompt: "",
         first_message: "",
-        model: "nvidia/nemotron-70b",
+        model: "qwen/qwen3.8-27b",
         voice_provider: "deepgram",
         voice_id: "aura-asteria-en",
         language: "en-US",
@@ -237,7 +241,7 @@ function AssistantBuilder() {
         name: newData.name || "New Assistant",
         system_prompt: newData.system_prompt || "You are a helpful AI assistant.",
         first_message: newData.first_message || null,
-        model: newData.model || "nvidia/nemotron-70b",
+        model: newData.model || "qwen/qwen3.8-27b",
         voice_provider: newData.voice_provider || "deepgram",
         voice_id: newData.voice_id || "aura-asteria-en",
         language: newData.language || "en-US",
