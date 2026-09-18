@@ -27,7 +27,9 @@ services:
       - key: VITE_SUPABASE_URL
         sync: false
 
-      # ── NVIDIA LLM ────────────────────────────────────────────────────────
+      # ── AI LLM Provider (Groq primary, NVIDIA fallback) ───────────────────
+      - key: GROQ_API_KEY
+        sync: false   # Set manually in Render dashboard
       - key: NVIDIA_API_KEY
         sync: false
       - key: NIM_BASE_URL
