@@ -42,10 +42,11 @@ export async function handleTwilioVoiceWebhook(req: Request, res: Response): Pro
         console.log(`[TwilioWebhook] Inbound call assigned to assistant: ${assistantId}`);
       } else {
         if (phoneRecord) phoneNumberId = phoneRecord.id;
-        assistantId = await getDefaultAssistantId();
+        assistantId = await getDefaultAssistantId((phoneRecord as any)?.user_id);
         console.log(`[TwilioWebhook] Inbound line ${To} unassigned, using Default Agent: ${assistantId}`);
       }
     }
+
 
     if (!assistantId) {
       const response = new twilio.twiml.VoiceResponse();
@@ -69,9 +70,19 @@ export async function handleTwilioVoiceWebhook(req: Request, res: Response): Pro
     const connect = response.connect();
 
     const hostHeader = req.headers.host;
-    const publicBaseUrl = getPublicBaseUrl() || (hostHeader ? `https://${hostHeader}` : process.env.PUBLIC_BASE_URL || "");
-    const rawHost = (hostHeader || publicBaseUrl || "localhost:3000").replace(/^https?:\/\//, "");
-    const streamUrl = `wss://${rawHost}/media-stream`;
+    const configuredBase = getPublicBaseUrl() || process.env.PUBLIC_BASE_URL || "";
+    let cleanHost = "";
+
+    // Always prefer the active public tunnel / domain over internal loopback
+    if (configuredBase && !configuredBase.includes("localhost") && !configuredBase.includes("127.0.0.1")) {
+      cleanHost = configuredBase.replace(/^https?:\/\//, "").replace(/\/+$/, "");
+    } else if (hostHeader && !hostHeader.includes("localhost") && !hostHeader.includes("127.0.0.1")) {
+      cleanHost = hostHeader;
+    } else {
+      cleanHost = (configuredBase || hostHeader || "localhost:3000").replace(/^https?:\/\//, "").replace(/\/+$/, "");
+    }
+
+    const streamUrl = `wss://${cleanHost}/media-stream`;
 
     console.log(`[TwilioWebhook] Connecting media stream to: ${streamUrl}`);
 

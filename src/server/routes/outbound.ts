@@ -1,6 +1,8 @@
 import { Request, Response } from "express";
 import { supabaseAdmin, getDefaultAssistantId } from "../supabase";
+const db: any = supabaseAdmin;
 import { getDynamicTwilioClient } from "../twilioClient";
+import { AuthenticatedRequest } from "../middleware/auth";
 
 export let activePublicBaseUrl = "";
 
@@ -45,11 +47,17 @@ function normalizePhoneNumber(raw: string): string {
 }
 
 // POST /api/outbound/call — single outbound call
-export async function handleSingleOutboundCall(req: Request, res: Response): Promise<void> {
+export async function handleSingleOutboundCall(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const userId = req.userId;
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
   const { student_number, line_id, context_note, caller_name } = req.body;
 
   const publicBaseUrl = getPublicBaseUrl();
-  const { client: twilioClient, credentials } = await getDynamicTwilioClient();
+  const { client: twilioClient, credentials } = await getDynamicTwilioClient(userId);
 
   // Validate required params
   if (!student_number) {
@@ -77,10 +85,11 @@ export async function handleSingleOutboundCall(req: Request, res: Response): Pro
     let assistantId = "";
 
     if (line_id) {
-      const { data: line } = await supabaseAdmin
+      const { data: line } = await db
         .from("phone_numbers")
-        .select("phone_number, assistant_id")
+        .select("phone_number, assistant_id, user_id")
         .eq("id", line_id)
+        .eq("user_id", userId)
         .maybeSingle();
 
       if (line) {
@@ -97,7 +106,7 @@ export async function handleSingleOutboundCall(req: Request, res: Response): Pro
 
     // Fallback: use Default Agent if none assigned
     if (!assistantId) {
-      assistantId = (await getDefaultAssistantId()) || "";
+      assistantId = (await getDefaultAssistantId(userId)) || "";
     }
 
     if (!assistantId) {
@@ -116,7 +125,7 @@ export async function handleSingleOutboundCall(req: Request, res: Response): Pro
     );
 
     // Create call record in DB
-    const { data: call, error: callErr } = await supabaseAdmin
+    const { data: call, error: callErr } = await db
       .from("calls")
       .insert({
         student_or_caller_number: cleanNumber,
@@ -125,13 +134,14 @@ export async function handleSingleOutboundCall(req: Request, res: Response): Pro
         started_at: new Date().toISOString(),
         assistant_id: assistantId,
         phone_number_id: line_id || null,
+        user_id: userId,
       })
       .select("id")
       .single();
 
     if (callErr || !call) {
       console.error("[SingleOutbound] Failed to create call record:", callErr);
-      res.status(500).json({ error: "Failed to create call record in database." });
+      res.status(500).json({ error: `Failed to create call record in database: ${callErr?.message || "Unknown error"}` });
       return;
     }
 
@@ -154,11 +164,17 @@ export async function handleSingleOutboundCall(req: Request, res: Response): Pro
 }
 
 // POST /api/outbound/start — batch outbound calls
-export async function handleOutboundBatch(req: Request, res: Response): Promise<void> {
+export async function handleOutboundBatch(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const userId = req.userId;
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
   const { student_numbers, line_id, context_note } = req.body;
 
   const publicBaseUrl = getPublicBaseUrl();
-  const { client: twilioClient, credentials } = await getDynamicTwilioClient();
+  const { client: twilioClient, credentials } = await getDynamicTwilioClient(userId);
 
   if (!student_numbers || !Array.isArray(student_numbers) || student_numbers.length === 0) {
     res.status(400).json({ error: "Missing required parameter: student_numbers (array)." });
@@ -179,10 +195,11 @@ export async function handleOutboundBatch(req: Request, res: Response): Promise<
     let assistantId = "";
 
     if (line_id) {
-      const { data: line } = await supabaseAdmin
+      const { data: line } = await db
         .from("phone_numbers")
-        .select("phone_number, assistant_id")
+        .select("phone_number, assistant_id, user_id")
         .eq("id", line_id)
+        .eq("user_id", userId)
         .maybeSingle();
       if (line) {
         if (line.phone_number) fromNumber = line.phone_number;
@@ -191,10 +208,11 @@ export async function handleOutboundBatch(req: Request, res: Response): Promise<
     }
 
     if (!assistantId) {
-      const { data: fallback } = await supabaseAdmin
+      const { data: fallback } = await db
         .from("assistants")
         .select("id")
         .eq("is_published", true)
+        .eq("user_id", userId)
         .limit(1)
         .maybeSingle();
       if (fallback) assistantId = fallback.id;
@@ -217,7 +235,7 @@ export async function handleOutboundBatch(req: Request, res: Response): Promise<
           const cleanNumber = normalizePhoneNumber(number);
           console.log(`[OutboundBatch] Dialing: ${cleanNumber}`);
 
-          const { data: call } = await supabaseAdmin
+          const { data: call } = await db
             .from("calls")
             .insert({
               student_or_caller_number: cleanNumber,
@@ -226,6 +244,7 @@ export async function handleOutboundBatch(req: Request, res: Response): Promise<
               started_at: new Date().toISOString(),
               assistant_id: assistantId || null,
               phone_number_id: line_id || null,
+              user_id: userId,
             })
             .select("id")
             .single();

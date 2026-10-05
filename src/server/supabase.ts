@@ -37,13 +37,42 @@ export async function getPhoneNumber(phoneNumber: string): Promise<PhoneNumber |
   return data;
 }
 
-export async function getDefaultAssistantId(): Promise<string | null> {
+export async function getDefaultAssistantId(userId?: string): Promise<string | null> {
+  if (userId) {
+    try {
+      const { data: profile } = await (supabaseAdmin as any)
+        .from("business_profiles")
+        .select("default_assistant_id")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (profile?.default_assistant_id) {
+        return profile.default_assistant_id;
+      }
+
+      // Fallback: newest assistant for this user
+      const { data: userAgent } = await supabaseAdmin
+        .from("assistants")
+        .select("id")
+        .eq("user_id" as any, userId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (userAgent?.id) {
+        return userAgent.id;
+      }
+    } catch (err: any) {
+      console.warn("[Supabase] Error reading user default_assistant_id:", err.message);
+    }
+  }
+
   if (process.env.DEFAULT_ASSISTANT_ID) {
     return process.env.DEFAULT_ASSISTANT_ID;
   }
 
   try {
-    const { data: settings } = await supabaseAdmin
+    const { data: settings } = await (supabaseAdmin as any)
       .from("app_settings")
       .select("*")
       .eq("id", 1)
@@ -66,25 +95,37 @@ export async function getDefaultAssistantId(): Promise<string | null> {
   return fallback?.id || null;
 }
 
-export async function setDefaultAssistantId(assistantId: string | null): Promise<boolean> {
+export async function setDefaultAssistantId(assistantId: string | null, userId?: string): Promise<boolean> {
+  if (userId) {
+    try {
+      await (supabaseAdmin as any)
+        .from("business_profiles")
+        .update({ default_assistant_id: assistantId, updated_at: new Date().toISOString() })
+        .eq("user_id", userId);
+      return true;
+    } catch (err: any) {
+      console.warn("[Supabase] Failed to update user default_assistant_id:", err.message);
+    }
+  }
+
   process.env.DEFAULT_ASSISTANT_ID = assistantId || "";
 
   try {
-    const { data: existing } = await supabaseAdmin
+    const { data: existing } = await (supabaseAdmin as any)
       .from("app_settings")
       .select("id")
       .eq("id", 1)
       .maybeSingle();
 
     if (existing) {
-      await supabaseAdmin
+      await (supabaseAdmin as any)
         .from("app_settings")
-        .update({ default_assistant_id: assistantId } as any)
+        .update({ default_assistant_id: assistantId })
         .eq("id", 1);
     } else {
-      await supabaseAdmin
+      await (supabaseAdmin as any)
         .from("app_settings")
-        .insert({ id: 1, default_assistant_id: assistantId } as any);
+        .insert({ id: 1, default_assistant_id: assistantId });
     }
     return true;
   } catch (err) {
@@ -92,6 +133,7 @@ export async function setDefaultAssistantId(assistantId: string | null): Promise
     return true;
   }
 }
+
 
 export async function getAssistantTools(assistantId: string): Promise<Tool[]> {
   const { data, error } = await supabaseAdmin

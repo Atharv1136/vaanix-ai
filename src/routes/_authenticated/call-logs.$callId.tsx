@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Flag, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { apiFetch, safeJson } from "@/lib/api";
 
 export const Route = createFileRoute("/_authenticated/call-logs/$callId")({
   component: TranscriptPanel,
@@ -36,7 +37,7 @@ function TranscriptPanel() {
 
   async function flagTurn() {
     if (!data?.call) return;
-    const { error } = await supabase.from("calls").update({ flagged: true, outcome: "flagged" }).eq("id", callId);
+    const { error } = await (supabase as any).from("calls").update({ outcome: "flagged" }).eq("id", callId);
     if (error) return toast.error(error.message);
     toast.success("Call flagged. Update the Knowledge Base to correct it.");
     qc.invalidateQueries();
@@ -50,12 +51,12 @@ function TranscriptPanel() {
     if (!data?.call) return;
     const toastId = toast.loading("Terminating call...");
     try {
-      const response = await fetch(`/api/calls/${callId}/end`, {
+      const response = await apiFetch(`/api/calls/${callId}/end`, {
         method: "POST",
       });
-      if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.error || "Failed to end call.");
+      const { ok, error } = await safeJson(response);
+      if (!ok) {
+        throw new Error(error || "Failed to end call.");
       }
       toast.dismiss(toastId);
       toast.success("Call terminated");
@@ -144,11 +145,11 @@ function TranscriptPanel() {
           <div className="flex items-center justify-between border-t border-border px-5 py-3 gap-3">
             <button
               onClick={flagTurn}
-              disabled={data?.call?.flagged}
+              disabled={data?.call?.outcome === "flagged"}
               className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground hover:bg-muted disabled:opacity-50 cursor-pointer"
             >
               <Flag className="h-4 w-4 text-warning" />
-              {data?.call?.flagged ? "Already flagged" : "Flag this call"}
+              {data?.call?.outcome === "flagged" ? "Already flagged" : "Flag this call"}
             </button>
 
             {data?.call?.outcome === "in_progress" && (

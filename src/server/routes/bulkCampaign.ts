@@ -1,7 +1,9 @@
 import { Request, Response } from "express";
-import { supabaseAdmin as db } from "../supabase";
+import { supabaseAdmin } from "../supabase";
+const db: any = supabaseAdmin;
 import { getPublicBaseUrl } from "./outbound";
 import { getDynamicTwilioClient } from "../twilioClient";
+import { AuthenticatedRequest } from "../middleware/auth";
 
 export function normalizePhoneNumber(raw: string): string {
   let str = (raw || "").trim();
@@ -193,7 +195,18 @@ function trackTwilioCallUntilCompletion(
  * Dials the next pending contact for a campaign.
  */
 async function dialNextContact(campaignId: string): Promise<void> {
-  const { client: twilioClient, credentials } = await getDynamicTwilioClient();
+  // Fetch campaign details first to determine user ownership and telephony credentials
+  const { data: campaign } = await db
+    .from("bulk_call_campaigns")
+    .select("*, phone_numbers(phone_number)")
+    .eq("id", campaignId)
+    .maybeSingle();
+
+  if (!campaign || campaign.status === "paused" || campaign.status === "completed" || campaign.status === "failed") {
+    return;
+  }
+
+  const { client: twilioClient, credentials } = await getDynamicTwilioClient(campaign.user_id);
   const publicBaseUrl = getPublicBaseUrl();
 
   if (!twilioClient || !publicBaseUrl) {
@@ -202,17 +215,6 @@ async function dialNextContact(campaignId: string): Promise<void> {
       .from("bulk_call_campaigns")
       .update({ status: "failed" })
       .eq("id", campaignId);
-    return;
-  }
-
-  // Fetch campaign details
-  const { data: campaign } = await db
-    .from("bulk_call_campaigns")
-    .select("*, phone_numbers(phone_number)")
-    .eq("id", campaignId)
-    .maybeSingle();
-
-  if (!campaign || campaign.status === "paused" || campaign.status === "completed" || campaign.status === "failed") {
     return;
   }
 
@@ -283,6 +285,7 @@ async function dialNextContact(campaignId: string): Promise<void> {
       started_at: new Date().toISOString(),
       assistant_id: campaign.assistant_id || null,
       phone_number_id: campaign.phone_number_id || null,
+      user_id: campaign.user_id,
     })
     .select("id")
     .single();
@@ -372,14 +375,31 @@ async function dialNextContact(campaignId: string): Promise<void> {
  * POST /api/outbound/bulk/start
  * Kick off a bulk campaign by ID (campaign + contacts must already be in DB).
  */
-export async function handleBulkCampaignStart(req: Request, res: Response): Promise<void> {
+export async function handleBulkCampaignStart(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const userId = req.userId;
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
   const { campaignId, simulate } = req.body;
   if (!campaignId) {
     res.status(400).json({ error: "Missing campaignId." });
     return;
   }
 
-  const { client: twilioClient } = await getDynamicTwilioClient();
+  const { data: campaign } = await db
+    .from("bulk_call_campaigns")
+    .select("id, user_id")
+    .eq("id", campaignId)
+    .maybeSingle();
+
+  if (!campaign || campaign.user_id !== userId) {
+    res.status(404).json({ error: "Campaign not found" });
+    return;
+  }
+
+  const { client: twilioClient } = await getDynamicTwilioClient(userId);
   const publicBaseUrl = getPublicBaseUrl();
 
   if (simulate || !twilioClient) {
@@ -419,10 +439,27 @@ export async function handleBulkCampaignStart(req: Request, res: Response): Prom
 /**
  * POST /api/outbound/bulk/pause
  */
-export async function handleBulkCampaignPause(req: Request, res: Response): Promise<void> {
+export async function handleBulkCampaignPause(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const userId = req.userId;
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
   const { campaignId } = req.body;
   if (!campaignId) {
     res.status(400).json({ error: "Missing campaignId." });
+    return;
+  }
+
+  const { data: campaign } = await db
+    .from("bulk_call_campaigns")
+    .select("id, user_id")
+    .eq("id", campaignId)
+    .maybeSingle();
+
+  if (!campaign || campaign.user_id !== userId) {
+    res.status(404).json({ error: "Campaign not found" });
     return;
   }
 
@@ -437,10 +474,27 @@ export async function handleBulkCampaignPause(req: Request, res: Response): Prom
 /**
  * POST /api/outbound/bulk/resume
  */
-export async function handleBulkCampaignResume(req: Request, res: Response): Promise<void> {
+export async function handleBulkCampaignResume(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const userId = req.userId;
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
   const { campaignId } = req.body;
   if (!campaignId) {
     res.status(400).json({ error: "Missing campaignId." });
+    return;
+  }
+
+  const { data: campaign } = await db
+    .from("bulk_call_campaigns")
+    .select("id, user_id")
+    .eq("id", campaignId)
+    .maybeSingle();
+
+  if (!campaign || campaign.user_id !== userId) {
+    res.status(404).json({ error: "Campaign not found" });
     return;
   }
 
@@ -457,10 +511,27 @@ export async function handleBulkCampaignResume(req: Request, res: Response): Pro
 /**
  * POST /api/outbound/bulk/retry-failed
  */
-export async function handleBulkCampaignRetryFailed(req: Request, res: Response): Promise<void> {
+export async function handleBulkCampaignRetryFailed(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const userId = req.userId;
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
   const { campaignId } = req.body;
   if (!campaignId) {
     res.status(400).json({ error: "Missing campaignId." });
+    return;
+  }
+
+  const { data: campaign } = await db
+    .from("bulk_call_campaigns")
+    .select("id, user_id")
+    .eq("id", campaignId)
+    .maybeSingle();
+
+  if (!campaign || campaign.user_id !== userId) {
+    res.status(404).json({ error: "Campaign not found" });
     return;
   }
 

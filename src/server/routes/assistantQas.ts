@@ -8,11 +8,24 @@ import {
   saveAssistantQAs,
 } from "../supabase";
 import { completionWithFallback } from "../services/aiKeyPool";
+import { AuthenticatedRequest } from "../middleware/auth";
 
 // GET /api/assistants/:assistantId/qas
-export async function handleGetQAs(req: Request, res: Response): Promise<void> {
-  const { assistantId } = req.params;
+export async function handleGetQAs(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const assistantId = typeof req.params.assistantId === "string" ? req.params.assistantId : req.params.assistantId?.[0] || "";
+  const userId = req.userId;
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
   try {
+    const assistant = await getAssistant(assistantId);
+    if (!assistant || (assistant as any).user_id !== userId) {
+      res.status(404).json({ error: "Assistant not found" });
+      return;
+    }
+
     const qas = await getAssistantQAs(assistantId);
     res.json(qas);
   } catch (error: any) {
@@ -22,16 +35,22 @@ export async function handleGetQAs(req: Request, res: Response): Promise<void> {
 }
 
 // POST /api/assistants/:assistantId/qas/generate
-export async function handleGenerateQAs(req: Request, res: Response): Promise<void> {
-  const { assistantId } = req.params;
+export async function handleGenerateQAs(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const assistantId = typeof req.params.assistantId === "string" ? req.params.assistantId : req.params.assistantId?.[0] || "";
   const { instruction } = req.body;
+  const userId = req.userId;
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
 
   try {
     const assistant = await getAssistant(assistantId);
-    if (!assistant) {
+    if (!assistant || (assistant as any).user_id !== userId) {
       res.status(404).json({ error: "Assistant not found." });
       return;
     }
+
 
     const kbDocs = await getAssistantKBDocuments(assistantId);
 
@@ -107,9 +126,14 @@ ${kbDocs.length > 0 ? kbDocs.map((d) => `--- ${d.title} ---\n${d.content}`).join
 }
 
 // POST /api/assistants/:assistantId/qas
-export async function handleSaveQA(req: Request, res: Response): Promise<void> {
-  const { assistantId } = req.params;
+export async function handleSaveQA(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const assistantId = typeof req.params.assistantId === "string" ? req.params.assistantId : req.params.assistantId?.[0] || "";
   const { id, question, answer } = req.body;
+  const userId = req.userId;
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
 
   if (!question || !answer) {
     res.status(400).json({ error: "question and answer are required." });
@@ -117,6 +141,12 @@ export async function handleSaveQA(req: Request, res: Response): Promise<void> {
   }
 
   try {
+    const assistant = await getAssistant(assistantId);
+    if (!assistant || (assistant as any).user_id !== userId) {
+      res.status(404).json({ error: "Assistant not found." });
+      return;
+    }
+
     if (id) {
       // Update
       const { data, error } = await supabaseAdmin
@@ -147,9 +177,26 @@ export async function handleSaveQA(req: Request, res: Response): Promise<void> {
 }
 
 // DELETE /api/qas/:id
-export async function handleDeleteQA(req: Request, res: Response): Promise<void> {
-  const { id } = req.params;
+export async function handleDeleteQA(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const id = typeof req.params.id === "string" ? req.params.id : req.params.id?.[0] || "";
+  const userId = req.userId;
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
   try {
+    const { data: qa } = await supabaseAdmin
+      .from("assistant_qas")
+      .select("assistant_id, assistants(user_id)")
+      .eq("id", id)
+      .single();
+
+    if (!qa || (qa as any).assistants?.user_id !== userId) {
+      res.status(404).json({ error: "QA not found." });
+      return;
+    }
+
     const { error } = await supabaseAdmin.from("assistant_qas").delete().eq("id", id);
 
     if (error) throw error;
@@ -161,9 +208,14 @@ export async function handleDeleteQA(req: Request, res: Response): Promise<void>
 }
 
 // POST /api/assistants/:assistantId/qas/bulk
-export async function handleBulkSaveQAs(req: Request, res: Response): Promise<void> {
-  const { assistantId } = req.params;
+export async function handleBulkSaveQAs(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const assistantId = typeof req.params.assistantId === "string" ? req.params.assistantId : req.params.assistantId?.[0] || "";
   const { qas } = req.body;
+  const userId = req.userId;
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
 
   if (!qas || !Array.isArray(qas)) {
     res.status(400).json({ error: "qas array is required." });
@@ -171,6 +223,12 @@ export async function handleBulkSaveQAs(req: Request, res: Response): Promise<vo
   }
 
   try {
+    const assistant = await getAssistant(assistantId);
+    if (!assistant || (assistant as any).user_id !== userId) {
+      res.status(404).json({ error: "Assistant not found." });
+      return;
+    }
+
     await deleteAssistantQAs(assistantId);
     if (qas.length > 0) {
       await saveAssistantQAs(assistantId, qas);

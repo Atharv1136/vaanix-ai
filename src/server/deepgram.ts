@@ -17,7 +17,7 @@ export async function createDeepgramStream(
   console.log(`[Deepgram] Initialising connection with Lang: "${deepgramLang}" (original: "${language}")`);
   console.log(`[Deepgram] API Key (first 8 chars): ${apiKey.substring(0, 8)}...`);
 
-  const deepgram = new DeepgramClient(apiKey);
+  const deepgram = new DeepgramClient(apiKey as any);
   
   const options = {
     model: "nova-2",
@@ -26,7 +26,7 @@ export async function createDeepgramStream(
     encoding: "mulaw",
     sample_rate: 8000,
     channels: 1,
-    endpointing: 300, // Standard 300ms silence detection
+    endpointing: 300,
   };
 
   console.log(`[Deepgram] Options:`, JSON.stringify(options));
@@ -39,7 +39,7 @@ export async function createDeepgramStream(
 
   connection.on("message", (data: any) => {
     if (data.type === "Results") {
-      const text = data.channel?.alternatives?.[0]?.transcript || "";
+      const text = data.channel?.alternatives?.[0]?.transcript?.trim() || "";
       if (text) {
         if (data.is_final) {
           onTranscript(text);

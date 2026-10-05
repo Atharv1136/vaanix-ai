@@ -10,8 +10,6 @@ export async function authenticateApiKey(req: Request, res: Response, next: any)
   }
 
   const token = authHeader.substring(7);
-  // For production, you'd hash the token and compare with key_hash.
-  // We're keeping it simple here for MVP.
   const { data, error } = await supabaseAdmin
     .from("api_keys")
     .select("*")
@@ -29,11 +27,16 @@ export async function authenticateApiKey(req: Request, res: Response, next: any)
     .update({ last_used_at: new Date().toISOString() })
     .eq("id", data.id);
 
+  (req as any).apiKeyUserId = (data as any).user_id;
   next();
 }
 
 export async function getAssistants(req: Request, res: Response) {
-  const { data, error } = await supabaseAdmin.from("assistants").select("*");
+  const userId = (req as any).apiKeyUserId;
+  let query = supabaseAdmin.from("assistants").select("*");
+  if (userId) query = query.eq("user_id" as any, userId);
+
+  const { data, error } = await query;
   if (error) {
     res.status(500).json({ error: error.message });
     return;
@@ -42,11 +45,16 @@ export async function getAssistants(req: Request, res: Response) {
 }
 
 export async function getAssistant(req: Request, res: Response) {
-  const { data, error } = await supabaseAdmin
+  const userId = (req as any).apiKeyUserId;
+  const assistantId = typeof req.params.id === "string" ? req.params.id : req.params.id?.[0] || "";
+  let query = supabaseAdmin
     .from("assistants")
     .select("*")
-    .eq("id", req.params.id)
-    .maybeSingle();
+    .eq("id", assistantId);
+
+  if (userId) query = query.eq("user_id" as any, userId);
+
+  const { data, error } = await query.maybeSingle();
 
   if (error || !data) {
     res.status(404).json({ error: "Assistant not found" });
@@ -56,9 +64,13 @@ export async function getAssistant(req: Request, res: Response) {
 }
 
 export async function createAssistant(req: Request, res: Response) {
+  const userId = (req as any).apiKeyUserId;
+  const payload = { ...req.body };
+  if (userId) payload.user_id = userId;
+
   const { data, error } = await supabaseAdmin
     .from("assistants")
-    .insert(req.body)
+    .insert(payload)
     .select("*")
     .single();
 
@@ -70,12 +82,16 @@ export async function createAssistant(req: Request, res: Response) {
 }
 
 export async function updateAssistant(req: Request, res: Response) {
-  const { data, error } = await supabaseAdmin
+  const userId = (req as any).apiKeyUserId;
+  const assistantId = typeof req.params.id === "string" ? req.params.id : req.params.id?.[0] || "";
+  let query = supabaseAdmin
     .from("assistants")
     .update(req.body)
-    .eq("id", req.params.id)
-    .select("*")
-    .single();
+    .eq("id", assistantId);
+
+  if (userId) query = query.eq("user_id" as any, userId);
+
+  const { data, error } = await query.select("*").single();
 
   if (error) {
     res.status(400).json({ error: error.message });
@@ -85,10 +101,16 @@ export async function updateAssistant(req: Request, res: Response) {
 }
 
 export async function deleteAssistant(req: Request, res: Response) {
-  const { error } = await supabaseAdmin
+  const userId = (req as any).apiKeyUserId;
+  const assistantId = typeof req.params.id === "string" ? req.params.id : req.params.id?.[0] || "";
+  let query = supabaseAdmin
     .from("assistants")
     .delete()
-    .eq("id", req.params.id);
+    .eq("id", assistantId);
+
+  if (userId) query = query.eq("user_id" as any, userId);
+
+  const { error } = await query;
 
   if (error) {
     res.status(400).json({ error: error.message });
@@ -96,3 +118,4 @@ export async function deleteAssistant(req: Request, res: Response) {
   }
   res.status(204).send();
 }
+

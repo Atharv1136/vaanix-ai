@@ -12,6 +12,7 @@ import {
   Assistant,
   Tool,
 } from "../supabase";
+import { finalizeCall } from "../actions/postCall";
 
 const transcriptionClients = new Map<string, Set<WebSocket>>();
 
@@ -110,26 +111,32 @@ function calculateSimilarity(str1: string, str2: string): number {
 
 /**
  * Detect sentence boundaries in accumulated text.
+ * Supports English, Hindi / Marathi (। ॥), newlines, and clause-level commas.
  * Returns [completedSentences, remainder].
  */
 function extractSentences(buffer: string): [string[], string] {
-  // Match sentence endings: . ! ? followed by space or end-of-string, or line breaks
-  const sentenceEndPattern = /([.!?])\s+|([.!?])$/;
+  const pattern = /([.!?।॥\n])\s*|(,\s+)/g;
   const sentences: string[] = [];
-  let remaining = buffer;
+  let lastIndex = 0;
+  let match;
 
-  while (true) {
-    const match = sentenceEndPattern.exec(remaining);
-    if (!match) break;
-    const endIdx = match.index + match[0].length;
-    const sentence = remaining.substring(0, endIdx).trim();
-    if (sentence.length > 0) {
-      sentences.push(sentence);
+  while ((match = pattern.exec(buffer)) !== null) {
+    const isComma = match[0].includes(",");
+    const potentialSentence = buffer.substring(lastIndex, match.index + match[0].length).trim();
+
+    // If it's a comma, only split if we have accumulated at least 12 characters to avoid tiny fragments
+    if (isComma && potentialSentence.length < 12) {
+      continue;
     }
-    remaining = remaining.substring(endIdx);
+
+    if (potentialSentence.length > 0) {
+      sentences.push(potentialSentence);
+      lastIndex = match.index + match[0].length;
+    }
   }
 
-  return [sentences, remaining];
+  const remainder = buffer.substring(lastIndex);
+  return [sentences, remainder];
 }
 
 /**
@@ -198,13 +205,31 @@ export function handleMediaStream(ws: WebSocket) {
     if (callSid) {
       const durationSeconds = Math.round((Date.now() - callStartTime) / 1000);
       updateCallStatus(callSid, durationSeconds, "resolved");
+      if ((assistant as any)?.user_id) {
+        finalizeCall(callSid, (assistant as any).user_id).catch(() => {});
+      }
     }
 
     ws.close();
   };
 
-  const interruptAI = () => {
+  let aiSpeakingStartTime = 0;
+
+  const interruptAI = (callerText?: string) => {
     if (!isAISpeaking && !activeAbortController) return;
+
+    // Echo protection: Don't interrupt within the first 700ms of AI speech.
+    // Acoustic echo from phone speaker often feeds back into mic on start.
+    if (aiSpeakingStartTime > 0 && Date.now() - aiSpeakingStartTime < 700) {
+      console.log(`[MediaStream] Ignoring interruption within echo guard window (${Date.now() - aiSpeakingStartTime}ms).`);
+      return;
+    }
+
+    // Ignore very brief single-word background noise or coughs during AI playback
+    if (callerText && callerText.trim().length < 4) {
+      console.log(`[MediaStream] Ignoring brief utterance ("${callerText}") during AI playback.`);
+      return;
+    }
 
     console.log(`[MediaStream] Caller interrupted AI on Call ${callSid?.substring(0, 8)}.`);
 
@@ -222,6 +247,7 @@ export function handleMediaStream(ws: WebSocket) {
     if (playbackEndTimer) { clearTimeout(playbackEndTimer); playbackEndTimer = null; }
 
     isAISpeaking = false;
+    aiSpeakingStartTime = 0;
   };
 
   /**
@@ -246,6 +272,7 @@ export function handleMediaStream(ws: WebSocket) {
 
       console.log(`[AI] ${label} sentence ${++sentenceIndex}: "${trimmed}"`);
       isAISpeaking = true;
+      if (!aiSpeakingStartTime) aiSpeakingStartTime = Date.now();
 
       try {
         const pcmBuffer = await getElevenLabsVoiceStream(
@@ -293,11 +320,13 @@ export function handleMediaStream(ws: WebSocket) {
       playbackEndTimer = setTimeout(() => {
         if (activeAbortController === controller) {
           isAISpeaking = false;
+          aiSpeakingStartTime = 0;
           activeAbortController = null;
         }
-      }, totalPlaybackMs + 600);
+      }, totalPlaybackMs + 400);
     } else if (!controller.signal.aborted) {
       isAISpeaking = false;
+      aiSpeakingStartTime = 0;
       if (activeAbortController === controller) activeAbortController = null;
     }
 
@@ -388,12 +417,13 @@ export function handleMediaStream(ws: WebSocket) {
           setTimeout(async () => {
             try {
               console.log(`[AI] Speaking first message: "${firstMsg}"`);
-              await saveCallTranscriptTurn(callSid, "ai", firstMsg, turnIndex++);
+              saveCallTranscriptTurn(callSid, "ai", firstMsg, turnIndex++).catch(() => {});
               broadcastTranscription(callSid, "ai", firstMsg);
 
               const firstMsgController = new AbortController();
               activeAbortController = firstMsgController;
               isAISpeaking = true;
+              aiSpeakingStartTime = Date.now();
 
               const pcmBuffer = await getElevenLabsVoiceStream(
                 firstMsg,
@@ -407,9 +437,10 @@ export function handleMediaStream(ws: WebSocket) {
                 playbackEndTimer = setTimeout(() => {
                   if (activeAbortController === firstMsgController) {
                     isAISpeaking = false;
+                    aiSpeakingStartTime = 0;
                     activeAbortController = null;
                   }
-                }, playbackMs + 600);
+                }, playbackMs + 400);
               }
             } catch (err) {
               console.error("[MediaStream] Error playing first message:", err);
@@ -426,167 +457,196 @@ export function handleMediaStream(ws: WebSocket) {
         // Start Deepgram STT stream — non-fatal if it fails
         const assistantLanguage = (assistant as any).language || "en-US";
         try {
-          deepgramStream = await createDeepgramStream(
-            async (text: string) => {
-              if (callEnded || !assistant) return;
-              console.log(`[Caller] Says (final): "${text}"`);
+          let callerTurnDebounceTimer: NodeJS.Timeout | null = null;
+          let callerAccumulatedText = "";
 
-              interruptAI();
+          const handleCallerFinalUtterance = async (fullText: string) => {
+            if (callEnded || !assistant) return;
+            console.log(`[Caller] Says (final turn): "${fullText}"`);
 
-              await saveCallTranscriptTurn(callSid, "caller", text, turnIndex++);
-              conversationHistory.push({ speaker: "caller", text });
-              broadcastTranscription(callSid, "caller", text);
+            interruptAI(fullText);
 
-              const turnController = new AbortController();
-              activeAbortController = turnController;
+            saveCallTranscriptTurn(callSid, "caller", fullText, turnIndex++).catch(() => {});
+            conversationHistory.push({ speaker: "caller", text: fullText });
+            broadcastTranscription(callSid, "caller", fullText);
 
-              try {
-                // 1. Fast-path: QA cache lookup
-                let matchedAnswer = "";
-                let bestScore = 0;
-                let bestQA: any = null;
+            const turnController = new AbortController();
+            activeAbortController = turnController;
 
-                for (const qa of cachedQAs) {
-                  const score = calculateSimilarity(text, qa.question);
-                  if (score > bestScore) {
-                    bestScore = score;
-                    bestQA = qa;
-                  }
+            try {
+              // 1. Fast-path: QA cache lookup
+              let matchedAnswer = "";
+              let bestScore = 0;
+              let bestQA: any = null;
+
+              for (const qa of cachedQAs) {
+                const score = calculateSimilarity(fullText, qa.question);
+                if (score > bestScore) {
+                  bestScore = score;
+                  bestQA = qa;
                 }
+              }
 
-                if (bestScore >= 0.45 && bestQA) {
-                  matchedAnswer = bestQA.answer;
-                  console.log(
-                    `[Cache Hit] Score: ${bestScore.toFixed(2)} → "${bestQA.question}"`,
-                  );
-                }
+              if (bestScore >= 0.45 && bestQA) {
+                matchedAnswer = bestQA.answer;
+                console.log(
+                  `[Cache Hit] Score: ${bestScore.toFixed(2)} → "${bestQA.question}"`,
+                );
+              }
 
-                if (matchedAnswer) {
-                  isAISpeaking = true;
-                  console.log(`[AI] Cache Answer: "${matchedAnswer}"`);
-                  await saveCallTranscriptTurn(callSid, "ai", matchedAnswer, turnIndex++);
-                  broadcastTranscription(callSid, "ai", matchedAnswer);
-                  conversationHistory.push({ speaker: "ai", text: matchedAnswer });
+              if (matchedAnswer) {
+                isAISpeaking = true;
+                aiSpeakingStartTime = Date.now();
+                console.log(`[AI] Cache Answer: "${matchedAnswer}"`);
+                saveCallTranscriptTurn(callSid, "ai", matchedAnswer, turnIndex++).catch(() => {});
+                broadcastTranscription(callSid, "ai", matchedAnswer);
+                conversationHistory.push({ speaker: "ai", text: matchedAnswer });
 
-                  const pcmBuffer = await getElevenLabsVoiceStream(
-                    matchedAnswer,
-                    assistant.voice_id,
-                    turnController.signal,
-                    (assistant as any).language,
-                  );
-                  if (!turnController.signal.aborted && !callEnded) {
-                    const playbackMs = sendAudioToTwilio(ws, streamSid, pcmBuffer);
-                    if (playbackEndTimer) clearTimeout(playbackEndTimer);
-                    playbackEndTimer = setTimeout(() => {
-                      if (activeAbortController === turnController) {
-                        isAISpeaking = false;
-                        activeAbortController = null;
-                      }
-                    }, playbackMs + 600);
-                  }
-                  return;
-                }
-
-                // 2. Cache miss — KB injection + LLM with sentence-level streaming
-                console.log(`[Cache Miss] Streaming LLM response.`);
-
-                let kbContext = "";
-                if (kbDocs.length > 0) {
-                  const lowerText = text.toLowerCase();
-                  const matchedDocs = kbDocs.filter(
-                    (d) =>
-                      d.title.toLowerCase().includes(lowerText) ||
-                      d.content.toLowerCase().includes(lowerText) ||
-                      lowerText
-                        .split(/\s+/)
-                        .some((word) => word.length > 3 && d.content.toLowerCase().includes(word)),
-                  );
-
-                  if (matchedDocs.length > 0) {
-                    kbContext = `Here is relevant context from the knowledge base for this question:\n${matchedDocs
-                      .slice(0, 3)
-                      .map((d) => `--- ${d.title} ---\n${d.content}`)
-                      .join("\n\n")}\nAnswer the user's question using the above context.`;
-                    console.log(`[KB] Injected ${matchedDocs.length} docs into context.`);
-                  }
-                }
-
-                let generationHistory = [...conversationHistory];
-                if (kbContext) {
-                  generationHistory[generationHistory.length - 1] = {
-                    speaker: "caller",
-                    text: `${text}\n\n[CONTEXT:\n${kbContext}\n]`,
-                  };
-                }
-
-                const replyGenerator = getAIReplyStream(
-                  assistant,
-                  tools,
-                  generationHistory,
+                const pcmBuffer = await getElevenLabsVoiceStream(
+                  matchedAnswer,
+                  assistant.voice_id,
                   turnController.signal,
+                  (assistant as any).language,
+                );
+                if (!turnController.signal.aborted && !callEnded) {
+                  const playbackMs = sendAudioToTwilio(ws, streamSid, pcmBuffer);
+                  if (playbackEndTimer) clearTimeout(playbackEndTimer);
+                  playbackEndTimer = setTimeout(() => {
+                    if (activeAbortController === turnController) {
+                      isAISpeaking = false;
+                      aiSpeakingStartTime = 0;
+                      activeAbortController = null;
+                    }
+                  }, playbackMs + 400);
+                }
+                return;
+              }
+
+              // 2. Cache miss — KB injection + LLM with sentence-level streaming
+              console.log(`[Cache Miss] Streaming LLM response.`);
+
+              let kbContext = "";
+              if (kbDocs.length > 0) {
+                const lowerText = fullText.toLowerCase();
+                const matchedDocs = kbDocs.filter(
+                  (d) =>
+                    d.title.toLowerCase().includes(lowerText) ||
+                    d.content.toLowerCase().includes(lowerText) ||
+                    lowerText
+                      .split(/\s+/)
+                      .some((word) => word.length > 3 && d.content.toLowerCase().includes(word)),
                 );
 
-                // 🚀 SENTENCE-LEVEL STREAMING: start speaking first sentence immediately
-                const fullReplyText = await streamReplyWithSentencePipeline(
-                  replyGenerator,
-                  turnController,
-                  "LLM",
-                );
-
-                if (turnController.signal.aborted) {
-                  console.log("[MediaStream] LLM generation aborted.");
-                  return;
+                if (matchedDocs.length > 0) {
+                  kbContext = `Here is relevant context from the knowledge base for this question:\n${matchedDocs
+                    .slice(0, 3)
+                    .map((d) => `--- ${d.title} ---\n${d.content}`)
+                    .join("\n\n")}\nAnswer the user's question using the above context.`;
+                  console.log(`[KB] Injected ${matchedDocs.length} docs into context.`);
                 }
+              }
 
-                if (fullReplyText) {
-                  console.log(`[AI] Full reply: "${fullReplyText}"`);
-                  await saveCallTranscriptTurn(callSid, "ai", fullReplyText, turnIndex++);
-                  broadcastTranscription(callSid, "ai", fullReplyText);
-                  conversationHistory.push({ speaker: "ai", text: fullReplyText });
-                }
+              let generationHistory = [...conversationHistory];
+              if (kbContext) {
+                generationHistory[generationHistory.length - 1] = {
+                  speaker: "caller",
+                  text: `${fullText}\n\n[CONTEXT:\n${kbContext}\n]`,
+                };
+              }
 
-                // Check for tool-driven actions
-                const lastTurn = conversationHistory[conversationHistory.length - 1];
-                if (lastTurn?.speaker === "tool" && lastTurn.tool_results) {
-                  for (const tr of lastTurn.tool_results) {
-                    if (tr.content.includes("end_call")) {
-                      console.log("[MediaStream] Tool requested end call.");
-                      cleanup();
-                    }
-                  }
-                }
-              } catch (err: any) {
-                if (err.name === "AbortError" || turnController.signal.aborted) {
-                  console.warn(`[MediaStream] Non-fatal turn error for call ${callSid}:`, err?.message || err);
-                  try {
-                    const fallbackMsg = "I'm sorry, I didn't quite catch that. Could you please repeat?";
-                    const pcmBuffer = await getElevenLabsVoiceStream(
-                      fallbackMsg,
-                      assistant?.voice_id,
-                      undefined,
-                      (assistant as any)?.language,
-                    );
-                    if (!callEnded) {
-                      sendAudioToTwilio(ws, streamSid, pcmBuffer);
-                      await saveCallTranscriptTurn(callSid, "ai", fallbackMsg, turnIndex++);
-                    }
-                  } catch (speechErr) {
-                    console.warn("[MediaStream] Fallback speech error:", speechErr);
+              if (assistant) {
+                (assistant as any).active_call_id = callSid;
+              }
+
+              const replyGenerator = getAIReplyStream(
+                assistant,
+                tools,
+                generationHistory,
+                turnController.signal,
+              );
+
+              // 🚀 SENTENCE-LEVEL STREAMING: start speaking first sentence immediately
+              const fullReplyText = await streamReplyWithSentencePipeline(
+                replyGenerator,
+                turnController,
+                "LLM",
+              );
+
+              if (turnController.signal.aborted) {
+                console.log("[MediaStream] LLM generation aborted.");
+                return;
+              }
+
+              if (fullReplyText) {
+                console.log(`[AI] Full reply: "${fullReplyText}"`);
+                saveCallTranscriptTurn(callSid, "ai", fullReplyText, turnIndex++).catch(() => {});
+                broadcastTranscription(callSid, "ai", fullReplyText);
+                conversationHistory.push({ speaker: "ai", text: fullReplyText });
+              }
+
+              // Check for tool-driven actions
+              const lastTurn = conversationHistory[conversationHistory.length - 1];
+              if (lastTurn?.speaker === "tool" && lastTurn.tool_results) {
+                for (const tr of lastTurn.tool_results) {
+                  if (tr.content.includes("end_call")) {
+                    console.log("[MediaStream] Tool requested end call.");
+                    cleanup();
                   }
                 }
               }
+            } catch (err: any) {
+              if (err.name === "AbortError" || turnController.signal.aborted) {
+                return;
+              }
+              console.warn(`[MediaStream] Non-fatal turn error for call ${callSid}:`, err?.message || err);
+              try {
+                const fallbackMsg = "I'm sorry, I didn't quite catch that. Could you please repeat?";
+                const pcmBuffer = await getElevenLabsVoiceStream(
+                  fallbackMsg,
+                  assistant?.voice_id,
+                  undefined,
+                  (assistant as any)?.language,
+                );
+                if (!callEnded) {
+                  sendAudioToTwilio(ws, streamSid, pcmBuffer);
+                  saveCallTranscriptTurn(callSid, "ai", fallbackMsg, turnIndex++).catch(() => {});
+                }
+              } catch (speechErr) {
+                console.warn("[MediaStream] Fallback speech error:", speechErr);
+              }
+            }
+          };
+
+          deepgramStream = await createDeepgramStream(
+            (chunkText: string) => {
+              if (callEnded || !assistant) return;
+              const trimmed = chunkText.trim();
+              if (!trimmed) return;
+
+              callerAccumulatedText = callerAccumulatedText
+                ? `${callerAccumulatedText} ${trimmed}`
+                : trimmed;
+
+              console.log(`[Caller] Chunk received: "${trimmed}" (buffered: "${callerAccumulatedText}")`);
+
+              if (callerTurnDebounceTimer) clearTimeout(callerTurnDebounceTimer);
+              callerTurnDebounceTimer = setTimeout(() => {
+                const toProcess = callerAccumulatedText;
+                callerAccumulatedText = "";
+                callerTurnDebounceTimer = null;
+                handleCallerFinalUtterance(toProcess);
+              }, 350);
             },
             (err) => {
-              // Deepgram STT error — non-fatal. Log and nullify so we stop sending audio to it.
               console.warn(`[Deepgram] STT error (non-fatal, call continues): ${err?.message || err}`);
               deepgramStream = null;
             },
-            // Interim transcript → trigger early interruption
             (interimText: string) => {
               if (callEnded) return;
-              if (isAISpeaking || activeAbortController) {
-                console.log(`[Caller] Interim interrupt: "${interimText}"`);
-                interruptAI();
+              const words = interimText.trim().split(/\s+/).filter(Boolean);
+              if (words.length >= 3 && isAISpeaking) {
+                console.log(`[Caller] Interim interrupt with >= 3 words: "${interimText}"`);
+                interruptAI(interimText);
               }
             },
             assistantLanguage,

@@ -1,78 +1,83 @@
 import { getKBDocuments } from "../supabase";
+import { executeAction } from "../actions/runner";
+import { ACTION_REGISTRY } from "../actions/registry";
 
-export async function executeTool(toolName: string, input: any, assistantTools: any[]): Promise<string> {
-  // Find the matched tool configuration
-  const matchedTool = assistantTools.find(t => t.name === toolName);
-  
+export async function executeTool(
+  toolName: string,
+  input: any,
+  assistantTools: any[] = [],
+  userId?: string,
+  callId?: string
+): Promise<string> {
+  // Check Action Registry first (all 11 built-in and domain actions)
+  if (ACTION_REGISTRY[toolName]) {
+    if (!userId) return "Unable to verify organization authorization.";
+    const result = await executeAction(toolName, input, {
+      userId,
+      callId,
+      callerNumber: input?.phone || input?.customer_phone,
+    });
+    return result.message;
+  }
+
+  // Find the matched tool configuration in custom assistant tools
+  const sanitize = (s: string) => s.toLowerCase().replace(/[^a-z0-9_-]/g, "_");
+  const matchedTool = assistantTools.find(
+    (t) =>
+      t.name === toolName ||
+      t.tool_type === toolName ||
+      sanitize(t.name) === toolName ||
+      sanitize(t.tool_type || "") === toolName
+  );
+
   if (!matchedTool) {
     return `Error: Tool '${toolName}' not found or not enabled for this assistant.`;
   }
 
   try {
     switch (matchedTool.tool_type) {
-      case 'knowledge_base': {
+      case "knowledge_base": {
         const query = input.query || "";
         console.log(`[ToolExecutor] Executing knowledge_base search for: ${query}`);
-        // Simple search for MVP: return all KB documents for this tool_id.
-        // For production, you'd want pgvector/embeddings or full-text search.
         const docs = await getKBDocuments(matchedTool.id);
-        if (docs.length === 0) {
-          return "No knowledge base documents found.";
+
+        if (!docs || docs.length === 0) {
+          return "No knowledge base documents found for this query.";
         }
-        
-        // Very basic keyword match if query exists, else return all
-        let matchedDocs = docs;
-        if (query) {
-          const lowerQuery = query.toLowerCase();
-          matchedDocs = docs.filter(d => 
-            d.title.toLowerCase().includes(lowerQuery) || 
-            d.content.toLowerCase().includes(lowerQuery)
-          );
-          if (matchedDocs.length === 0) {
-             matchedDocs = docs; // fallback to providing all if no exact keyword match
-          }
-        }
-        
-        const resultText = matchedDocs.map(d => `--- ${d.title} ---\n${d.content}`).join("\n\n");
-        return resultText.substring(0, 4000); // truncate if too large for LLM context
+
+        // Return concatenated relevant content
+        const combined = docs
+          .map((d: any) => `Document: ${d.title}\nContent:\n${d.content}`)
+          .join("\n\n---\n\n");
+
+        return combined.slice(0, 1500); // Guard token length
       }
-      
-      case 'webhook': {
-        console.log(`[ToolExecutor] Executing webhook for tool ${toolName}`);
-        const config = matchedTool.config_json as any || {};
-        const url = config.url;
-        if (!url) return "Error: Webhook URL not configured.";
-        
-        const response = await fetch(url, {
-          method: config.method || "POST",
+
+      case "webhook": {
+        const endpoint = matchedTool.config?.url;
+        if (!endpoint) {
+          return "Error: Webhook tool does not have a configured URL.";
+        }
+
+        const res = await fetch(endpoint, {
+          method: matchedTool.config?.method || "POST",
           headers: {
             "Content-Type": "application/json",
-            ...(config.headers || {})
+            ...(matchedTool.config?.headers || {}),
           },
-          body: JSON.stringify(input)
+          body: JSON.stringify(input),
+          signal: AbortSignal.timeout(5000),
         });
-        
-        const text = await response.text();
-        return text.substring(0, 2000);
-      }
-      
-      case 'transfer_call': {
-        console.log(`[ToolExecutor] Executing transfer_call`);
-        // Signal to the conversation loop to issue a TwiML transfer command
-        return JSON.stringify({ _action: "transfer_call" });
-      }
-      
-      case 'end_call': {
-        console.log(`[ToolExecutor] Executing end_call`);
-        // Signal to the conversation loop to hang up
-        return JSON.stringify({ _action: "end_call" });
+
+        const text = await res.text();
+        return `Webhook response (status ${res.status}): ${text.slice(0, 1000)}`;
       }
 
       default:
-        return `Error: Unknown tool type '${matchedTool.tool_type}'.`;
+        return `Error: Unsupported tool type '${matchedTool.tool_type}'`;
     }
-  } catch (error: any) {
-    console.error(`[ToolExecutor] Error executing tool ${toolName}:`, error);
-    return `Error executing tool: ${error.message}`;
+  } catch (err: any) {
+    console.error(`[ToolExecutor] Error executing tool '${toolName}':`, err);
+    return `Tool execution failed: ${err.message}`;
   }
 }

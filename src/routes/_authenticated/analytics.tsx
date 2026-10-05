@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { apiFetch, safeJson } from "@/lib/api";
 
 export const Route = createFileRoute("/_authenticated/analytics")({
   component: Analytics,
@@ -108,9 +109,10 @@ function CallDetailOverlay({ callId, onClose }: { callId: string; onClose: () =>
   // Generate AI summary
   const summaryMutation = useMutation({
     mutationFn: async () => {
-      const res = await fetch(`/api/analytics/call-summary/${callId}`, { method: "POST" });
-      if (!res.ok) throw new Error("Failed to generate summary");
-      return res.json();
+      const res = await apiFetch(`/api/analytics/call-summary/${callId}`, { method: "POST" });
+      const { ok, data, error } = await safeJson(res);
+      if (!ok) throw new Error(error || "Failed to generate summary");
+      return data;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["analytics-call", callId] });

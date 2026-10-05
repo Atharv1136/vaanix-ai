@@ -16,6 +16,7 @@ import {
   X,
   PhoneForwarded,
   Activity,
+  LayoutDashboard,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -23,7 +24,7 @@ import { useState, useEffect } from "react";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
-  beforeLoad: async () => {
+  beforeLoad: async ({ location }) => {
     if (typeof window === "undefined") {
       return { user: null };
     }
@@ -32,6 +33,19 @@ export const Route = createFileRoute("/_authenticated")({
       if (!data.session?.user) {
         throw redirect({ to: "/auth" });
       }
+
+      // Verify onboarding status
+      const { data: profile } = await (supabase as any)
+        .from("business_profiles")
+        .select("onboarding_completed")
+        .eq("user_id", data.session.user.id)
+        .maybeSingle();
+
+      const isOnboarding = location.pathname === "/onboarding";
+      if (!profile?.onboarding_completed && !isOnboarding) {
+        throw redirect({ to: "/onboarding" });
+      }
+
       return { user: data.session.user };
     } catch (err) {
       if (err && typeof err === "object" && "to" in err) throw err;
@@ -42,7 +56,8 @@ export const Route = createFileRoute("/_authenticated")({
 });
 
 const nav = [
-  { to: "/assistants", label: "Agents", icon: Bot },
+  { to: "/workspace", label: "Workspace", icon: LayoutDashboard },
+  { to: "/assistants", label: "Agent Studio", icon: Bot },
   { to: "/phone-numbers", label: "Phone Numbers", icon: PhoneCall },
   { to: "/bulk-calls", label: "Bulk Calling", icon: PhoneOutgoing },
   { to: "/tools", label: "Tools Library", icon: Wrench },
@@ -203,6 +218,10 @@ function Layout() {
     setMobileOpen(false);
   }, [pathname]);
 
+  if (pathname === "/onboarding") {
+    return <Outlet />;
+  }
+
   async function signOut() {
     await qc.cancelQueries();
     qc.clear();
@@ -260,10 +279,10 @@ function Layout() {
             >
               {/* Active glow dot */}
               {active && (
-                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 rounded-r bg-gold-gradient" />
+                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 rounded-r bg-gradient-to-b from-blue-500 to-cyan-400" />
               )}
               
-              <Icon className={`h-4 w-4 shrink-0 transition-colors ${active ? "text-[#E8C77A]" : "group-hover:text-slate-200"}`} />
+              <Icon className={`h-4 w-4 shrink-0 transition-colors ${active ? "text-cyan-400" : "group-hover:text-slate-200"}`} />
               
               {(!collapsed || isMobile) && (
                 <span className="truncate">{item.label}</span>
@@ -285,12 +304,12 @@ function Layout() {
         {(!collapsed || isMobile) ? (
           <div className="space-y-4">
             <div className="flex items-center gap-3 px-1">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gold-gradient text-[#05070D] font-bold text-sm">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 via-cyan-500 to-orange-500 text-white font-bold text-sm">
                 {userInitial}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-xs font-semibold text-slate-100 truncate">{userEmail}</div>
-                <div className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Developer</div>
+                <div className="text-[10px] text-cyan-400/80 uppercase tracking-widest font-bold">Admin Console</div>
               </div>
             </div>
             

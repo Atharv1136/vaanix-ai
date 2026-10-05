@@ -27,6 +27,7 @@ import {
   Radio,
   Sparkles,
 } from "lucide-react";
+import { apiFetch, safeJson } from "@/lib/api";
 
 export const Route = createFileRoute("/_authenticated/settings")({
   component: Settings,
@@ -76,6 +77,13 @@ function AddKeyModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
 
     const defaultModel = provider === "gemini" ? "gemini-1.5-flash" : modelOverride || null;
 
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      toast.error("User session not found.");
+      setSaving(false);
+      return;
+    }
+
     const { error } = await (supabase as any).from("ai_provider_keys").insert({
       provider,
       label,
@@ -84,6 +92,7 @@ function AddKeyModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
       model_override: defaultModel,
       is_active: true,
       priority: 0,
+      user_id: user.id,
     });
     setSaving(false);
     if (error) {
@@ -250,9 +259,10 @@ function AiKeyPoolSection() {
   const { data: poolStats } = useQuery({
     queryKey: ["key-pool-stats"],
     queryFn: async () => {
-      const res = await fetch("/api/analytics/key-pool-stats");
-      if (!res.ok) return null;
-      return res.json();
+      const res = await apiFetch("/api/analytics/key-pool-stats");
+      const { ok, data } = await safeJson(res);
+      if (!ok) return null;
+      return data;
     },
   });
 
@@ -291,14 +301,15 @@ function AiKeyPoolSection() {
   async function testKeyFn(keyId: string) {
     setTestingId(keyId);
     try {
-      const res = await fetch("/api/analytics/test-key", {
+      const res = await apiFetch("/api/analytics/test-key", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ keyId }),
       });
-      const data = await res.json();
-      setTestResults((prev) => ({ ...prev, [keyId]: data.ok ? "ok" : "fail" }));
-      toast[data.ok ? "success" : "error"](data.ok ? "Key is working ✓" : `Key failed: ${data.error}`);
+      const { ok, data, error } = await safeJson(res);
+      const isSuccess = ok && data?.ok;
+      setTestResults((prev) => ({ ...prev, [keyId]: isSuccess ? "ok" : "fail" }));
+      toast[isSuccess ? "success" : "error"](isSuccess ? "Key is working ✓" : `Key failed: ${data?.error || error || "Unknown error"}`);
     } catch {
       setTestResults((prev) => ({ ...prev, [keyId]: "fail" }));
       toast.error("Test request failed.");
@@ -524,33 +535,38 @@ function TelephonyBYOCSection({ settingsData }: { settingsData: any }) {
   async function saveTelephony() {
     setSaving(true);
     try {
-      // 1. Update app_settings
+      // 1. Update business_profiles for the authenticated tenant
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not logged in");
+
       const { error: setErr } = await (supabase as any)
-        .from("app_settings")
+        .from("business_profiles")
         .update({
           telephony_provider: provider,
           telephony_account_sid: accountSid.trim() || null,
           telephony_auth_token: authToken.trim() || null,
           telephony_phone_number: phoneNumber.trim() || null,
         })
-        .eq("id", 1);
+        .eq("user_id", user.id);
 
       if (setErr) throw setErr;
 
       // 2. If a phone number is provided, automatically ensure it's registered in phone_numbers table
       if (phoneNumber.trim()) {
         const cleanNumber = phoneNumber.trim();
-        const { data: existing } = await supabase
+        const { data: existing } = await (supabase as any)
           .from("phone_numbers")
           .select("id")
           .eq("phone_number", cleanNumber)
+          .eq("user_id", user.id)
           .maybeSingle();
 
         if (!existing) {
           // Fetch first assistant if available to link
-          const { data: firstAssistant } = await supabase
+          const { data: firstAssistant } = await (supabase as any)
             .from("assistants")
             .select("id")
+            .eq("user_id", user.id)
             .limit(1)
             .maybeSingle();
 
@@ -559,6 +575,7 @@ function TelephonyBYOCSection({ settingsData }: { settingsData: any }) {
             phone_number: cleanNumber,
             provider: provider,
             assistant_id: firstAssistant?.id || null,
+            user_id: user.id,
           });
         }
       }
@@ -689,7 +706,9 @@ function Settings() {
   const { data } = useQuery({
     queryKey: ["settings"],
     queryFn: async () => {
-      const { data } = await (supabase as any).from("app_settings").select("*").eq("id", 1).maybeSingle();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+      const { data } = await (supabase as any).from("business_profiles").select("*").eq("user_id", user.id).maybeSingle();
       return data;
     },
   });
@@ -709,24 +728,31 @@ function Settings() {
 
   useEffect(() => {
     if (!data) return;
-    setOrgName(data.org_name || "");
-    setStart(data.business_hours_start || "");
-    setEnd(data.business_hours_end || "");
-    setDays(data.business_days || "");
+    setOrgName(data.business_name || "");
+    const wh = data.working_hours;
+    if (wh && typeof wh === "object") {
+      setDays(wh.days || "Mon - Sat");
+      setStart(wh.start || "10:00");
+      setEnd(wh.end || "19:00");
+    }
     setGreet(data.default_greeting || "");
   }, [data]);
 
   async function save() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
     const { error } = await (supabase as any)
-      .from("app_settings")
+      .from("business_profiles")
       .update({
-        org_name: orgName,
-        business_hours_start: start,
-        business_hours_end: end,
-        business_days: days,
-        default_greeting: greet,
+        business_name: orgName,
+        working_hours: {
+          days,
+          start,
+          end,
+        },
       })
-      .eq("id", 1);
+      .eq("user_id", user.id);
     if (error) toast.error(error.message);
     else {
       toast.success("Settings saved");
@@ -741,7 +767,7 @@ function Settings() {
     setPlaying(true);
     const toastId = toast.loading("Generating audio preview...");
     try {
-      const response = await fetch("/api/tts/preview", {
+      const response = await apiFetch("/api/tts/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: greet }),

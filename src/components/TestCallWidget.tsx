@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Device, Call } from "@twilio/voice-sdk";
 import { Mic, MicOff, Phone, PhoneOff, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { apiFetch, safeJson } from "@/lib/api";
 
 interface TestCallWidgetProps {
   assistantId: string;
@@ -26,9 +27,10 @@ export function TestCallWidget({ assistantId }: TestCallWidgetProps) {
     try {
       setStatus("connecting");
 
-      const res = await fetch("/api/voice-token", { method: "POST" });
-      if (!res.ok) throw new Error("Failed to get token");
-      const { token } = await res.json();
+      const res = await apiFetch("/api/voice-token", { method: "POST" });
+      const { ok, data, error } = await safeJson(res);
+      if (!ok || !data?.token) throw new Error(error || "Failed to get voice token");
+      const token = data.token;
 
       const newDevice = new Device(token, {
         codecPreferences: [Call.Codec.Opus, Call.Codec.PCMU],

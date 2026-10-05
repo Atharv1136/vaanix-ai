@@ -178,8 +178,8 @@ function Dashboard() {
           <h1 className="text-2xl font-bold tracking-tight text-slate-100 font-sans">Developer Console</h1>
           <p className="text-sm text-slate-400 mt-1">Deploy, monitor, and analyze your Vaanix voice agents.</p>
         </div>
-        <Link to="/assistants/new">
-          <button className="bg-gold-gradient text-[#05070D] font-bold text-xs uppercase tracking-wider px-5 py-3 rounded-full hover:shadow-[0_0_20px_rgba(232,199,122,0.4)] transition-all duration-300 flex items-center gap-2">
+        <Link to="/assistants/$assistantId" params={{ assistantId: "new" }}>
+          <button className="bg-gradient-to-r from-blue-600 via-cyan-500 to-teal-400 text-slate-950 font-bold text-xs uppercase tracking-wider px-5 py-3 rounded-full hover:shadow-[0_0_20px_rgba(6,182,212,0.4)] transition-all duration-300 flex items-center gap-2">
             <Plus className="w-4 h-4 stroke-[3px]" />
             New Agent
           </button>
@@ -226,7 +226,7 @@ function Dashboard() {
         <div className="lg:col-span-7 space-y-4">
           <div className="flex items-center justify-between px-1">
             <h2 className="text-lg font-bold text-slate-200">Recent Agents</h2>
-            <Link to="/assistants/new" className="text-xs font-bold text-[#E8C77A] hover:underline uppercase tracking-wider">
+            <Link to="/assistants" className="text-xs font-bold text-cyan-400 hover:underline uppercase tracking-wider">
               View All
             </Link>
           </div>
@@ -248,8 +248,8 @@ function Dashboard() {
                 <h3 className="text-sm font-bold text-slate-200">No Agents Active</h3>
                 <p className="text-xs text-slate-400">Design your first conversational agent flow and go live instantly.</p>
               </div>
-              <Link to="/assistants/new">
-                <button className="bg-gold-gradient text-[#05070D] font-bold text-xs uppercase tracking-wider px-6 py-2.5 rounded-full shadow-md">
+              <Link to="/assistants/$assistantId" params={{ assistantId: "new" }}>
+                <button className="bg-gradient-to-r from-blue-600 via-cyan-500 to-teal-400 text-slate-950 font-bold text-xs uppercase tracking-wider px-6 py-2.5 rounded-full shadow-md hover:shadow-[0_0_20px_rgba(6,182,212,0.4)] transition-all">
                   Create Agent
                 </button>
               </Link>
@@ -356,7 +356,7 @@ function Dashboard() {
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: idx * 0.05 }}
                 >
-                  <Link to={`/call-logs/${call.id}`} className="group block">
+                  <Link to="/call-logs/$callId" params={{ callId: call.id }} className="group block">
                     <div className="relative rounded-2xl border border-white/5 bg-[#0A0D16] p-4 transition-all duration-300 hover:border-slate-800 hover:translate-y-[-2px] hover:shadow-[0_4px_20px_rgba(0,0,0,0.4)] flex items-center justify-between overflow-hidden">
                       <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-brand-gradient transform scale-y-0 group-hover:scale-y-100 transition-transform duration-300 origin-top" />
                       

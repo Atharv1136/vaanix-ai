@@ -24,6 +24,7 @@ import {
 } from "./routes/outbound";
 import { handleEndCall } from "./routes/calls";
 import { handleVoiceToken } from "./routes/voiceToken";
+import { startScheduledJobsWorker } from "./actions/postCall";
 import {
   authenticateApiKey,
   getAssistants,
@@ -60,6 +61,8 @@ import {
   handleGetKeyPoolStats,
 } from "./routes/analyticsRoutes";
 
+import { requireUser } from "./middleware/auth";
+
 const app = express();
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
@@ -84,17 +87,20 @@ app.post("/api/config/tunnel", (req, res) => {
   }
 });
 
+// Twilio Webhooks (public - called directly by Twilio carrier)
 app.post("/webhooks/twilio/voice", handleTwilioVoiceWebhook);
-app.post("/api/voice-token", handleVoiceToken);
-app.post("/api/tts/preview", handleTTSPreview);
-app.post("/api/outbound/start", handleOutboundBatch);
-app.post("/api/outbound/call", handleSingleOutboundCall);
-app.post("/api/outbound/bulk/start", handleBulkCampaignStart);
-app.post("/api/outbound/bulk/pause", handleBulkCampaignPause);
-app.post("/api/outbound/bulk/resume", handleBulkCampaignResume);
-app.post("/api/outbound/bulk/retry-failed", handleBulkCampaignRetryFailed);
 app.post("/api/outbound/bulk/call-status", handleBulkCallStatus);
-app.post("/api/calls/:id/end", handleEndCall);
+
+// Protected Client APIs
+app.post("/api/voice-token", requireUser, handleVoiceToken);
+app.post("/api/tts/preview", handleTTSPreview);
+app.post("/api/outbound/start", requireUser, handleOutboundBatch);
+app.post("/api/outbound/call", requireUser, handleSingleOutboundCall);
+app.post("/api/outbound/bulk/start", requireUser, handleBulkCampaignStart);
+app.post("/api/outbound/bulk/pause", requireUser, handleBulkCampaignPause);
+app.post("/api/outbound/bulk/resume", requireUser, handleBulkCampaignResume);
+app.post("/api/outbound/bulk/retry-failed", requireUser, handleBulkCampaignRetryFailed);
+app.post("/api/calls/:id/end", requireUser, handleEndCall);
 
 // Assistants API (protected by API Key)
 app.get("/api/assistants", authenticateApiKey, getAssistants);
@@ -104,35 +110,35 @@ app.patch("/api/assistants/:id", authenticateApiKey, updateAssistant);
 app.delete("/api/assistants/:id", authenticateApiKey, deleteAssistant);
 
 // Phone Numbers API
-app.post("/api/phone-numbers", addPhoneNumber);
-app.post("/api/phone-numbers/sync", syncPhoneNumbers);
+app.post("/api/phone-numbers", requireUser, addPhoneNumber);
+app.post("/api/phone-numbers/sync", requireUser, syncPhoneNumbers);
 
 // Knowledge Base API
-app.post("/api/assistants/:assistantId/kb-upload", uploadKbDocument);
-app.get("/api/assistants/:assistantId/kb-documents", getKbDocuments);
-app.delete("/api/kb-documents/:id", deleteKbDocument);
+app.post("/api/assistants/:assistantId/kb-upload", requireUser, uploadKbDocument);
+app.get("/api/assistants/:assistantId/kb-documents", requireUser, getKbDocuments);
+app.delete("/api/kb-documents/:id", requireUser, deleteKbDocument);
 
 // Cached Q&As API
-app.get("/api/assistants/:assistantId/qas", handleGetQAs);
-app.post("/api/assistants/:assistantId/qas/generate", handleGenerateQAs);
-app.post("/api/assistants/:assistantId/qas", handleSaveQA);
-app.post("/api/assistants/:assistantId/qas/bulk", handleBulkSaveQAs);
-app.delete("/api/qas/:id", handleDeleteQA);
+app.get("/api/assistants/:assistantId/qas", requireUser, handleGetQAs);
+app.post("/api/assistants/:assistantId/qas/generate", requireUser, handleGenerateQAs);
+app.post("/api/assistants/:assistantId/qas", requireUser, handleSaveQA);
+app.post("/api/assistants/:assistantId/qas/bulk", requireUser, handleBulkSaveQAs);
+app.delete("/api/qas/:id", requireUser, handleDeleteQA);
 
 // Default Agent Settings API
-app.get("/api/settings/default-agent", async (_req, res) => {
+app.get("/api/settings/default-agent", requireUser, async (req: any, res) => {
   try {
-    const defaultId = await getDefaultAssistantId();
+    const defaultId = await getDefaultAssistantId(req.userId);
     res.json({ default_assistant_id: defaultId });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.post("/api/settings/default-agent", async (req, res) => {
+app.post("/api/settings/default-agent", requireUser, async (req: any, res) => {
   try {
     const { assistant_id } = req.body;
-    await setDefaultAssistantId(assistant_id || null);
+    await setDefaultAssistantId(assistant_id || null, req.userId);
     res.json({ success: true, default_assistant_id: assistant_id });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -145,9 +151,9 @@ app.get("/health", (_req, res) => {
 });
 
 // Analytics + AI Key Pool routes
-app.post("/api/analytics/call-summary/:callId", handleGenerateCallSummary);
-app.post("/api/analytics/test-key", handleTestAiKey);
-app.get("/api/analytics/key-pool-stats", handleGetKeyPoolStats);
+app.post("/api/analytics/call-summary/:callId", requireUser, handleGenerateCallSummary);
+app.post("/api/analytics/test-key", requireUser, handleTestAiKey);
+app.get("/api/analytics/key-pool-stats", requireUser, handleGetKeyPoolStats);
 
 // Voice preview (no auth needed — just sample audio)
 app.use(voicePreviewRouter);
@@ -315,4 +321,5 @@ server.on("upgrade", (request, socket, head) => {
 
 server.listen(port, () => {
   console.log(`[Server] CampusConnect persistent leg listening on port ${port}`);
+  startScheduledJobsWorker();
 });

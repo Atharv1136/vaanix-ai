@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { supabaseAdmin } from "../supabase";
 import { completionWithFallback, testKey, getActiveKeys } from "../services/aiKeyPool";
 import type { AiProviderKey } from "../services/aiKeyPool";
+import { AuthenticatedRequest } from "../middleware/auth";
 
 const db = supabaseAdmin as any;
 
@@ -9,13 +10,19 @@ const db = supabaseAdmin as any;
  * POST /api/analytics/call-summary/:callId
  * Generates an AI summary of a call transcript and saves it to the calls table.
  */
-export async function handleGenerateCallSummary(req: Request, res: Response): Promise<void> {
+export async function handleGenerateCallSummary(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const userId = req.userId;
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
   const { callId } = req.params;
 
   try {
     // Fetch call + transcript
     const [{ data: call }, { data: turns }] = await Promise.all([
-      db.from("calls").select("*").eq("id", callId).maybeSingle(),
+      db.from("calls").select("*").eq("id", callId).eq("user_id", userId).maybeSingle(),
       db
         .from("call_transcripts")
         .select("speaker, text, turn_index")
@@ -55,7 +62,7 @@ export async function handleGenerateCallSummary(req: Request, res: Response): Pr
     let tokens = 0;
 
     try {
-      const result = await completionWithFallback(messages);
+      const result = await completionWithFallback(messages, undefined, userId);
       summaryText = result.text;
       providerName = result.provider;
       tokens = result.tokensUsed;
@@ -83,7 +90,8 @@ export async function handleGenerateCallSummary(req: Request, res: Response): Pr
         ai_summary: summaryText,
         call_sentiment: sentiment,
       })
-      .eq("id", callId);
+      .eq("id", callId)
+      .eq("user_id", userId);
 
     res.status(200).json({
       summary: summaryText,
@@ -102,7 +110,13 @@ export async function handleGenerateCallSummary(req: Request, res: Response): Pr
  * Tests an AI provider key with a simple prompt.
  * Body: { keyId: string }
  */
-export async function handleTestAiKey(req: Request, res: Response): Promise<void> {
+export async function handleTestAiKey(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const userId = req.userId;
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
   const { keyId } = req.body;
 
   if (!keyId) {
@@ -114,6 +128,7 @@ export async function handleTestAiKey(req: Request, res: Response): Promise<void
     .from("ai_provider_keys")
     .select("*")
     .eq("id", keyId)
+    .eq("user_id", userId)
     .maybeSingle();
 
   if (!key) {
@@ -129,9 +144,15 @@ export async function handleTestAiKey(req: Request, res: Response): Promise<void
  * GET /api/analytics/key-pool-stats
  * Returns aggregate stats across all AI provider keys.
  */
-export async function handleGetKeyPoolStats(req: Request, res: Response): Promise<void> {
+export async function handleGetKeyPoolStats(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const userId = req.userId;
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
   try {
-    const keys = await getActiveKeys();
+    const keys = await getActiveKeys(userId);
     const totalTokens = keys.reduce((s, k) => s + (k.estimated_tokens_used || 0), 0);
     const totalCost = keys.reduce((s, k) => s + parseFloat(String(k.estimated_cost_usd || 0)), 0);
     res.status(200).json({

@@ -17,9 +17,11 @@ import { Route as AuthenticatedAnalyticsRouteImport } from './routes/_authentica
 import { Route as AuthenticatedApiKeysRouteImport } from './routes/_authenticated/api-keys'
 import { Route as AuthenticatedBulkCallsRouteImport } from './routes/_authenticated/bulk-calls'
 import { Route as AuthenticatedCallLogsRouteImport } from './routes/_authenticated/call-logs'
+import { Route as AuthenticatedOnboardingRouteImport } from './routes/_authenticated/onboarding'
 import { Route as AuthenticatedPhoneNumbersRouteImport } from './routes/_authenticated/phone-numbers'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedToolsRouteImport } from './routes/_authenticated/tools'
+import { Route as AuthenticatedWorkspaceRouteImport } from './routes/_authenticated/workspace'
 import { Route as AuthenticatedAssistantsIndexRouteImport } from './routes/_authenticated/assistants.index'
 import { Route as AuthenticatedAssistantsAssistantIdRouteImport } from './routes/_authenticated/assistants.$assistantId'
 import { Route as AuthenticatedCallLogsCallIdRouteImport } from './routes/_authenticated/call-logs.$callId'
@@ -63,6 +65,11 @@ const AuthenticatedCallLogsRoute = AuthenticatedCallLogsRouteImport.update({
   path: '/call-logs',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedOnboardingRoute = AuthenticatedOnboardingRouteImport.update({
+  id: '/onboarding',
+  path: '/onboarding',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedPhoneNumbersRoute =
   AuthenticatedPhoneNumbersRouteImport.update({
     id: '/phone-numbers',
@@ -77,6 +84,11 @@ const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
 const AuthenticatedToolsRoute = AuthenticatedToolsRouteImport.update({
   id: '/tools',
   path: '/tools',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedWorkspaceRoute = AuthenticatedWorkspaceRouteImport.update({
+  id: '/workspace',
+  path: '/workspace',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedAssistantsIndexRoute =
@@ -106,9 +118,11 @@ export interface FileRoutesByFullPath {
   '/api-keys': typeof AuthenticatedApiKeysRoute
   '/bulk-calls': typeof AuthenticatedBulkCallsRoute
   '/call-logs': typeof AuthenticatedCallLogsRouteWithChildren
+  '/onboarding': typeof AuthenticatedOnboardingRoute
   '/phone-numbers': typeof AuthenticatedPhoneNumbersRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/tools': typeof AuthenticatedToolsRoute
+  '/workspace': typeof AuthenticatedWorkspaceRoute
   '/assistants/$assistantId': typeof AuthenticatedAssistantsAssistantIdRoute
   '/call-logs/$callId': typeof AuthenticatedCallLogsCallIdRoute
   '/assistants/': typeof AuthenticatedAssistantsIndexRoute
@@ -121,9 +135,11 @@ export interface FileRoutesByTo {
   '/api-keys': typeof AuthenticatedApiKeysRoute
   '/bulk-calls': typeof AuthenticatedBulkCallsRoute
   '/call-logs': typeof AuthenticatedCallLogsRouteWithChildren
+  '/onboarding': typeof AuthenticatedOnboardingRoute
   '/phone-numbers': typeof AuthenticatedPhoneNumbersRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/tools': typeof AuthenticatedToolsRoute
+  '/workspace': typeof AuthenticatedWorkspaceRoute
   '/assistants/$assistantId': typeof AuthenticatedAssistantsAssistantIdRoute
   '/call-logs/$callId': typeof AuthenticatedCallLogsCallIdRoute
   '/assistants': typeof AuthenticatedAssistantsIndexRoute
@@ -138,9 +154,11 @@ export interface FileRoutesById {
   '/_authenticated/api-keys': typeof AuthenticatedApiKeysRoute
   '/_authenticated/bulk-calls': typeof AuthenticatedBulkCallsRoute
   '/_authenticated/call-logs': typeof AuthenticatedCallLogsRouteWithChildren
+  '/_authenticated/onboarding': typeof AuthenticatedOnboardingRoute
   '/_authenticated/phone-numbers': typeof AuthenticatedPhoneNumbersRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/tools': typeof AuthenticatedToolsRoute
+  '/_authenticated/workspace': typeof AuthenticatedWorkspaceRoute
   '/_authenticated/assistants/$assistantId': typeof AuthenticatedAssistantsAssistantIdRoute
   '/_authenticated/call-logs/$callId': typeof AuthenticatedCallLogsCallIdRoute
   '/_authenticated/assistants/': typeof AuthenticatedAssistantsIndexRoute
@@ -155,9 +173,11 @@ export interface FileRouteTypes {
     | '/api-keys'
     | '/bulk-calls'
     | '/call-logs'
+    | '/onboarding'
     | '/phone-numbers'
     | '/settings'
     | '/tools'
+    | '/workspace'
     | '/assistants/$assistantId'
     | '/call-logs/$callId'
     | '/assistants/'
@@ -170,9 +190,11 @@ export interface FileRouteTypes {
     | '/api-keys'
     | '/bulk-calls'
     | '/call-logs'
+    | '/onboarding'
     | '/phone-numbers'
     | '/settings'
     | '/tools'
+    | '/workspace'
     | '/assistants/$assistantId'
     | '/call-logs/$callId'
     | '/assistants'
@@ -186,9 +208,11 @@ export interface FileRouteTypes {
     | '/_authenticated/api-keys'
     | '/_authenticated/bulk-calls'
     | '/_authenticated/call-logs'
+    | '/_authenticated/onboarding'
     | '/_authenticated/phone-numbers'
     | '/_authenticated/settings'
     | '/_authenticated/tools'
+    | '/_authenticated/workspace'
     | '/_authenticated/assistants/$assistantId'
     | '/_authenticated/call-logs/$callId'
     | '/_authenticated/assistants/'
@@ -259,6 +283,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCallLogsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/onboarding': {
+      id: '/_authenticated/onboarding'
+      path: '/onboarding'
+      fullPath: '/onboarding'
+      preLoaderRoute: typeof AuthenticatedOnboardingRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/phone-numbers': {
       id: '/_authenticated/phone-numbers'
       path: '/phone-numbers'
@@ -278,6 +309,13 @@ declare module '@tanstack/react-router' {
       path: '/tools'
       fullPath: '/tools'
       preLoaderRoute: typeof AuthenticatedToolsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/workspace': {
+      id: '/_authenticated/workspace'
+      path: '/workspace'
+      fullPath: '/workspace'
+      preLoaderRoute: typeof AuthenticatedWorkspaceRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/assistants/': {
@@ -322,9 +360,11 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedApiKeysRoute: typeof AuthenticatedApiKeysRoute
   AuthenticatedBulkCallsRoute: typeof AuthenticatedBulkCallsRoute
   AuthenticatedCallLogsRoute: typeof AuthenticatedCallLogsRouteWithChildren
+  AuthenticatedOnboardingRoute: typeof AuthenticatedOnboardingRoute
   AuthenticatedPhoneNumbersRoute: typeof AuthenticatedPhoneNumbersRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedToolsRoute: typeof AuthenticatedToolsRoute
+  AuthenticatedWorkspaceRoute: typeof AuthenticatedWorkspaceRoute
   AuthenticatedAssistantsAssistantIdRoute: typeof AuthenticatedAssistantsAssistantIdRoute
   AuthenticatedAssistantsIndexRoute: typeof AuthenticatedAssistantsIndexRoute
 }
@@ -334,9 +374,11 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedApiKeysRoute: AuthenticatedApiKeysRoute,
   AuthenticatedBulkCallsRoute: AuthenticatedBulkCallsRoute,
   AuthenticatedCallLogsRoute: AuthenticatedCallLogsRouteWithChildren,
+  AuthenticatedOnboardingRoute: AuthenticatedOnboardingRoute,
   AuthenticatedPhoneNumbersRoute: AuthenticatedPhoneNumbersRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedToolsRoute: AuthenticatedToolsRoute,
+  AuthenticatedWorkspaceRoute: AuthenticatedWorkspaceRoute,
   AuthenticatedAssistantsAssistantIdRoute:
     AuthenticatedAssistantsAssistantIdRoute,
   AuthenticatedAssistantsIndexRoute: AuthenticatedAssistantsIndexRoute,

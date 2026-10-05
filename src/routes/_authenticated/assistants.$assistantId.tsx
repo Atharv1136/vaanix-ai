@@ -30,6 +30,7 @@ import { Switch } from "@/components/ui/switch";
 import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
+import { apiFetch, safeJson } from "@/lib/api";
 
 export const Route = createFileRoute("/_authenticated/assistants/$assistantId")({
   component: AssistantBuilder,
@@ -160,9 +161,10 @@ function AssistantBuilder() {
     queryFn: async () => {
       if (assistantId === "new") return [];
       try {
-        const res = await fetch(`/api/assistants/${assistantId}/qas`);
-        if (!res.ok) return [];
-        return await res.json();
+        const res = await apiFetch(`/api/assistants/${assistantId}/qas`);
+        const { ok, data } = await safeJson(res);
+        if (!ok) return [];
+        return Array.isArray(data) ? data : [];
       } catch (err) {
         console.error("Failed to load QAs:", err);
         return [];
@@ -228,9 +230,9 @@ function AssistantBuilder() {
   // Fetch KB documents from server
   useEffect(() => {
     if (assistantId === "new") return;
-    fetch(`/api/assistants/${assistantId}/kb-documents`)
-      .then((r) => r.json())
-      .then((docs) => setKbDocs(Array.isArray(docs) ? docs : []))
+    apiFetch(`/api/assistants/${assistantId}/kb-documents`)
+      .then((r) => safeJson(r))
+      .then(({ ok, data }) => setKbDocs(ok && Array.isArray(data) ? data : []))
       .catch(() => {});
   }, [assistantId]);
 
@@ -310,17 +312,16 @@ function AssistantBuilder() {
     setKbUploading(true);
     try {
       const text = await file.text();
-      const res = await fetch(`/api/assistants/${assistantId}/kb-upload`, {
+      const res = await apiFetch(`/api/assistants/${assistantId}/kb-upload`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: file.name, content: text }),
       });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Upload failed");
+      const { ok, data, error } = await safeJson(res);
+      if (!ok) {
+        throw new Error(error || "Upload failed");
       }
-      const doc = await res.json();
-      setKbDocs((prev) => [doc, ...prev]);
+      setKbDocs((prev) => [data, ...prev]);
       toast.success("File uploaded", { description: `"${file.name}" added to knowledge base.` });
     } catch (err: any) {
       toast.error("Upload failed", { description: err.message });
@@ -331,30 +332,30 @@ function AssistantBuilder() {
   }
 
   async function handleDeleteKbDoc(id: string, title: string) {
-    const res = await fetch(`/api/kb-documents/${id}`, { method: "DELETE" });
-    if (res.ok) {
+    const res = await apiFetch(`/api/kb-documents/${id}`, { method: "DELETE" });
+    const { ok, error } = await safeJson(res);
+    if (ok) {
       setKbDocs((prev) => prev.filter((d) => d.id !== id));
       toast.success(`"${title}" removed.`);
     } else {
-      toast.error("Failed to delete document.");
+      toast.error(error || "Failed to delete document.");
     }
   }
 
   async function handleGenerateQAs() {
     setGeneratingQas(true);
     try {
-      const res = await fetch(`/api/assistants/${assistantId}/qas/generate`, {
+      const res = await apiFetch(`/api/assistants/${assistantId}/qas/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ instruction: qaInstruction }),
       });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Generation failed");
+      const { ok, data, error } = await safeJson(res);
+      if (!ok) {
+        throw new Error(error || "Generation failed");
       }
-      const data = await res.json();
       toast.success("Q&As Generated", {
-        description: `Successfully generated ${data.length} Q&As.`,
+        description: `Successfully generated ${Array.isArray(data) ? data.length : 0} Q&As.`,
       });
       refetchQas();
     } catch (err: any) {
@@ -425,15 +426,15 @@ function AssistantBuilder() {
 
       toast.info(`Detected ${parsed.length} Q&A items. Importing...`);
 
-      const res = await fetch(`/api/assistants/${assistantId}/qas/bulk`, {
+      const res = await apiFetch(`/api/assistants/${assistantId}/qas/bulk`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ qas: parsed }),
       });
 
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Failed to import Q&As.");
+      const { ok, error } = await safeJson(res);
+      if (!ok) {
+        throw new Error(error || "Failed to import Q&As.");
       }
 
       toast.success(`Successfully imported ${parsed.length} Q&As to cache!`);
@@ -449,8 +450,9 @@ function AssistantBuilder() {
 
   async function handleDeleteQA(id: string) {
     try {
-      const res = await fetch(`/api/qas/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Failed to delete");
+      const res = await apiFetch(`/api/qas/${id}`, { method: "DELETE" });
+      const { ok, error } = await safeJson(res);
+      if (!ok) throw new Error(error || "Failed to delete");
       toast.success("Q&A deleted");
       refetchQas();
     } catch (err: any) {
@@ -466,12 +468,13 @@ function AssistantBuilder() {
       return;
     }
     try {
-      const res = await fetch(`/api/assistants/${assistantId}/qas`, {
+      const res = await apiFetch(`/api/assistants/${assistantId}/qas`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, question, answer }),
       });
-      if (!res.ok) throw new Error("Failed to save QA");
+      const { ok, error } = await safeJson(res);
+      if (!ok) throw new Error(error || "Failed to save QA");
       toast.success(id ? "Q&A updated" : "Q&A added");
       refetchQas();
       if (id) {
@@ -508,7 +511,7 @@ function AssistantBuilder() {
     setPreviewingVoice(voiceId);
     try {
       const lang = currentLanguage;
-      const res = await fetch(`/api/voice-preview?voice_id=${encodeURIComponent(voiceId)}&language=${encodeURIComponent(lang)}`);
+      const res = await apiFetch(`/api/voice-preview?voice_id=${encodeURIComponent(voiceId)}&language=${encodeURIComponent(lang)}`);
       if (!res.ok) throw new Error(await res.text());
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);

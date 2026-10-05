@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { apiFetch, safeJson } from "@/lib/api";
 
 export const Route = createFileRoute("/_authenticated/phone-numbers")({
   ssr: false,
@@ -50,10 +51,10 @@ function PhoneNumbers() {
     queryKey: ["default_agent_setting"],
     queryFn: async () => {
       try {
-        const res = await fetch("/api/settings/default-agent");
-        if (!res.ok) return "";
-        const json = await res.json();
-        return json.default_assistant_id || "";
+        const res = await apiFetch("/api/settings/default-agent");
+        const { ok, data } = await safeJson(res);
+        if (!ok) return "";
+        return data.default_assistant_id || "";
       } catch {
         return "";
       }
@@ -65,19 +66,20 @@ function PhoneNumbers() {
   async function handleSaveDefaultAgent(agentId: string) {
     setSavingDefaultAgent(true);
     try {
-      const res = await fetch("/api/settings/default-agent", {
+      const res = await apiFetch("/api/settings/default-agent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ assistant_id: agentId === "none" ? "" : agentId }),
       });
-      if (res.ok) {
+      const { ok, error } = await safeJson(res);
+      if (ok) {
         toast.success("Default Agent updated! Unassigned calls will use this agent.");
         refetchDefaultAgent();
       } else {
-        toast.error("Failed to update Default Agent.");
+        toast.error("Failed to update Default Agent: " + (error || "Unknown error"));
       }
-    } catch {
-      toast.error("Network error saving Default Agent.");
+    } catch (err: any) {
+      toast.error("Network error saving Default Agent: " + err.message);
     } finally {
       setSavingDefaultAgent(false);
     }
@@ -140,36 +142,40 @@ function PhoneNumbers() {
       toast.error("Phone number and label are required.");
       return;
     }
-    const res = await fetch("/api/phone-numbers", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone_number: importNumber, label: importLabel }),
-    });
-    if (res.ok) {
-      toast.success("Phone number added.");
-      setShowImport(false);
-      setImportNumber("");
-      setImportLabel("");
-      qc.invalidateQueries({ queryKey: ["phone_numbers"] });
-    } else {
-      const err = await res.json();
-      toast.error(err.error || "Failed to add phone number.");
+    try {
+      const res = await apiFetch("/api/phone-numbers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone_number: importNumber, label: importLabel }),
+      });
+      const { ok, error } = await safeJson(res);
+      if (ok) {
+        toast.success("Phone number added.");
+        setShowImport(false);
+        setImportNumber("");
+        setImportLabel("");
+        qc.invalidateQueries({ queryKey: ["phone_numbers"] });
+      } else {
+        toast.error(error || "Failed to add phone number.");
+      }
+    } catch (err: any) {
+      toast.error("Network error: " + err.message);
     }
   }
 
   async function handleTwilioSync() {
     setSyncing(true);
     try {
-      const res = await fetch("/api/phone-numbers/sync", { method: "POST" });
-      const data = await res.json();
-      if (res.ok) {
-        toast.success(`Synced ${data.synced} number(s) from Twilio.`);
+      const res = await apiFetch("/api/phone-numbers/sync", { method: "POST" });
+      const { ok, data, error } = await safeJson(res);
+      if (ok) {
+        toast.success(`Synced ${data?.synced ?? 0} number(s) from Twilio.`);
         qc.invalidateQueries({ queryKey: ["phone_numbers"] });
       } else {
-        toast.error(data.error || "Sync failed.");
+        toast.error(error || "Sync failed.");
       }
-    } catch {
-      toast.error("Failed to reach server.");
+    } catch (err: any) {
+      toast.error("Failed to reach server: " + err.message);
     } finally {
       setSyncing(false);
     }
@@ -200,7 +206,7 @@ function PhoneNumbers() {
         ? `assistant_id:${outboundAssistantId}` 
         : "";
 
-      const res = await fetch("/api/outbound/call", {
+      const res = await apiFetch("/api/outbound/call", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -210,19 +216,20 @@ function PhoneNumbers() {
           caller_name: outboundName || "",
         }),
       });
-      const data = await res.json();
-      if (res.ok) {
+      const { ok, data, error } = await safeJson(res);
+      if (ok) {
         setCallStatus("success");
         toast.success("Call initiated!", { description: `Dialing ${outboundNumber}...` });
       } else {
         setCallStatus("error");
-        setCallError(data.error || "Unknown error");
-        toast.error("Call failed", { description: data.error });
+        const errMsg = error || data?.error || "Unknown error";
+        setCallError(errMsg);
+        toast.error("Call failed", { description: errMsg });
       }
     } catch (err: any) {
       setCallStatus("error");
       setCallError(err.message);
-      toast.error("Failed to start call.");
+      toast.error("Failed to start call", { description: err.message });
     }
   }
 
@@ -562,7 +569,7 @@ function PhoneNumbers() {
           <p className="text-xs text-muted-foreground">
             <strong className="text-foreground">How it works:</strong> Twilio will dial the number.
             When answered, your AI assistant handles the entire conversation autonomously using the
-            Deepgram → NVIDIA NIM → TTS pipeline. Transcripts appear in Call Logs.
+            Deepgram STT → AI Key Pool (Groq / Gemini / Together) → Neural TTS pipeline. Transcripts appear in Call Logs.
           </p>
         </div>
       </div>

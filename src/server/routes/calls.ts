@@ -1,16 +1,23 @@
 import { Request, Response } from "express";
 import { supabaseAdmin } from "../supabase";
 import { hangupCall } from "../twilioClient";
+import { AuthenticatedRequest } from "../middleware/auth";
 
-export async function handleEndCall(req: Request, res: Response): Promise<void> {
-  const { id } = req.params;
+export async function handleEndCall(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const callId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const userId = req.userId;
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
 
   try {
     // 1. Fetch Call Record to get Twilio CallSid
-    const { data: call, error } = await supabaseAdmin
+    const { data: call, error } = await (supabaseAdmin as any)
       .from("calls")
       .select("*")
-      .eq("id", id)
+      .eq("id", callId)
+      .eq("user_id", userId)
       .maybeSingle();
 
     if (error || !call) {
@@ -23,7 +30,7 @@ export async function handleEndCall(req: Request, res: Response): Promise<void> 
       return;
     }
 
-    console.log(`[EndCall] Requesting manual hangup for Call ${id}`);
+    console.log(`[EndCall] Requesting manual hangup for Call ${callId}`);
 
     // 2. Trigger hangup in Twilio
     // Twilio CallSid is logged as the primary ID (or can be looked up from line tracking)
@@ -36,7 +43,7 @@ export async function handleEndCall(req: Request, res: Response): Promise<void> 
       res.status(500).json({ error: "Failed to request Twilio hangup." });
     }
   } catch (err: any) {
-    console.error(`[EndCall] Error ending call ${id}:`, err);
+    console.error(`[EndCall] Error ending call ${callId}:`, err);
     res.status(500).json({ error: err.message || "Failed to terminate call." });
   }
 }

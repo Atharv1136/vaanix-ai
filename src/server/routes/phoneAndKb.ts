@@ -1,17 +1,26 @@
 import { Request, Response } from "express";
 import twilio from "twilio";
 import { supabaseAdmin } from "../supabase";
+import { AuthenticatedRequest } from "../middleware/auth";
+import { getTelephonyCredentials } from "../twilioClient";
 
 // POST /api/phone-numbers — manually add a phone number
-export async function addPhoneNumber(req: Request, res: Response): Promise<void> {
+export async function addPhoneNumber(req: AuthenticatedRequest, res: Response): Promise<void> {
   const { phone_number, label } = req.body;
+  const userId = req.userId;
+
   if (!phone_number || !label) {
     res.status(400).json({ error: "phone_number and label are required." });
     return;
   }
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
   const { data, error } = await supabaseAdmin
     .from("phone_numbers")
-    .insert({ phone_number, label })
+    .insert({ phone_number, label, user_id: userId } as any)
     .select()
     .single();
   if (error) {
@@ -22,12 +31,19 @@ export async function addPhoneNumber(req: Request, res: Response): Promise<void>
 }
 
 // POST /api/phone-numbers/sync — sync from Twilio account
-export async function syncPhoneNumbers(req: Request, res: Response): Promise<void> {
-  const accountSid = process.env.TWILIO_ACCOUNT_SID;
-  const authToken = process.env.TWILIO_AUTH_TOKEN;
+export async function syncPhoneNumbers(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const userId = req.userId;
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const creds = await getTelephonyCredentials(userId);
+  const accountSid = creds.accountSid || process.env.TWILIO_ACCOUNT_SID;
+  const authToken = creds.authToken || process.env.TWILIO_AUTH_TOKEN;
 
   if (!accountSid || !authToken) {
-    res.status(500).json({ error: "Twilio credentials not configured." });
+    res.status(500).json({ error: "Twilio credentials not configured. Please configure them in Settings." });
     return;
   }
 
@@ -39,18 +55,19 @@ export async function syncPhoneNumbers(req: Request, res: Response): Promise<voi
     const syncedNumbers: any[] = [];
 
     for (const n of numbers) {
-      // Check if already exists by twilio_sid
+      // Check if already exists for this user by twilio_sid or phone_number
       const { data: existing } = await supabaseAdmin
         .from("phone_numbers")
         .select("id")
-        .eq("twilio_sid", n.sid)
+        .eq("user_id" as any, userId)
+        .or(`twilio_sid.eq.${n.sid},phone_number.eq.${n.phoneNumber}`)
         .maybeSingle();
 
       if (existing) {
         // Update label
         const { data: updated } = await supabaseAdmin
           .from("phone_numbers")
-          .update({ label: n.friendlyName || n.phoneNumber, phone_number: n.phoneNumber })
+          .update({ label: n.friendlyName || n.phoneNumber, phone_number: n.phoneNumber, twilio_sid: n.sid } as any)
           .eq("id", existing.id)
           .select()
           .single();
@@ -58,7 +75,12 @@ export async function syncPhoneNumbers(req: Request, res: Response): Promise<voi
       } else {
         const { data: inserted } = await supabaseAdmin
           .from("phone_numbers")
-          .insert({ twilio_sid: n.sid, phone_number: n.phoneNumber, label: n.friendlyName || n.phoneNumber })
+          .insert({
+            user_id: userId,
+            twilio_sid: n.sid,
+            phone_number: n.phoneNumber,
+            label: n.friendlyName || n.phoneNumber,
+          } as any)
           .select()
           .single();
         if (inserted) { syncedNumbers.push(inserted); synced++; }
@@ -66,24 +88,40 @@ export async function syncPhoneNumbers(req: Request, res: Response): Promise<voi
     }
 
     res.json({ synced, numbers: syncedNumbers });
-
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to sync from Twilio." });
   }
 }
 
 // POST /api/assistants/:id/kb-upload — upload a knowledge base document
-export async function uploadKbDocument(req: Request, res: Response): Promise<void> {
+export async function uploadKbDocument(req: AuthenticatedRequest, res: Response): Promise<void> {
   const { assistantId } = req.params as { assistantId: string };
   const { title, content } = req.body;
+  const userId = req.userId;
 
   if (!title || !content) {
     res.status(400).json({ error: "title and content are required." });
     return;
   }
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
 
   try {
-    // Find or create a knowledge_base tool for this assistant
+    // Verify assistant ownership
+    const { data: assistant, error: assErr } = await supabaseAdmin
+      .from("assistants")
+      .select("id, user_id")
+      .eq("id", assistantId)
+      .eq("user_id" as any, userId)
+      .maybeSingle();
+
+    if (assErr || !assistant) {
+      res.status(404).json({ error: "Assistant not found or not owned by you." });
+      return;
+    }
+
     let toolId: string | null = null;
 
     // Look for existing KB tool assigned to this assistant
@@ -97,10 +135,15 @@ export async function uploadKbDocument(req: Request, res: Response): Promise<voi
     if (existingTool?.tool_id) {
       toolId = existingTool.tool_id;
     } else {
-      // Create a new KB tool and link it
+      // Create a new KB tool owned by the user and link it
       const { data: newTool, error: toolErr } = await supabaseAdmin
         .from("tools")
-        .insert({ name: "Knowledge Base", description: "Uploaded knowledge base documents", tool_type: "knowledge_base" })
+        .insert({
+          user_id: userId,
+          name: "Knowledge Base",
+          description: "Uploaded knowledge base documents",
+          tool_type: "knowledge_base"
+        } as any)
         .select()
         .single();
       if (toolErr || !newTool) {
@@ -133,8 +176,27 @@ export async function uploadKbDocument(req: Request, res: Response): Promise<voi
 }
 
 // GET /api/assistants/:id/kb-documents — get all KB docs for an assistant
-export async function getKbDocuments(req: Request, res: Response): Promise<void> {
+export async function getKbDocuments(req: AuthenticatedRequest, res: Response): Promise<void> {
   const { assistantId } = req.params as { assistantId: string };
+  const userId = req.userId;
+
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  // Verify assistant ownership
+  const { data: assistant } = await supabaseAdmin
+    .from("assistants")
+    .select("id")
+    .eq("id", assistantId)
+    .eq("user_id" as any, userId)
+    .maybeSingle();
+
+  if (!assistant) {
+    res.status(404).json({ error: "Assistant not found" });
+    return;
+  }
 
   const { data: atRows } = await supabaseAdmin
     .from("assistant_tools")
@@ -165,12 +227,32 @@ export async function getKbDocuments(req: Request, res: Response): Promise<void>
 }
 
 // DELETE /api/kb-documents/:id
-export async function deleteKbDocument(req: Request, res: Response): Promise<void> {
-  const { id } = req.params;
-  const { error } = await supabaseAdmin.from("kb_documents").delete().eq("id", id);
+export async function deleteKbDocument(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const docId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const userId = req.userId;
+
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  // Ensure document belongs to a tool owned by this user
+  const { data: doc } = await supabaseAdmin
+    .from("kb_documents")
+    .select("id, tools(user_id)")
+    .eq("id", docId)
+    .maybeSingle();
+
+  if (!doc || (doc.tools as any)?.user_id !== userId) {
+    res.status(404).json({ error: "Document not found or unauthorized" });
+    return;
+  }
+
+  const { error } = await supabaseAdmin.from("kb_documents").delete().eq("id", docId);
   if (error) {
     res.status(500).json({ error: error.message });
     return;
   }
   res.status(204).send();
 }
+

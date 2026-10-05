@@ -12,6 +12,7 @@
 import OpenAI from "openai";
 import { supabaseAdmin, Assistant, Tool } from "../supabase";
 import { executeTool } from "./toolExecutor";
+import { getAllActionTools } from "../actions/registry";
 
 // Cast to bypass Supabase generated types for new tables
 const db = supabaseAdmin as any;
@@ -74,14 +75,19 @@ export const DEFAULT_MODELS: Record<string, string> = {
 };
 
 /**
- * Fetch all active keys ordered by priority from DB.
+ * Fetch all active keys ordered by priority from DB (optionally filtered by user_id).
  */
-export async function getActiveKeys(): Promise<AiProviderKey[]> {
-  const { data, error } = await db
+export async function getActiveKeys(userId?: string): Promise<AiProviderKey[]> {
+  let query = db
     .from("ai_provider_keys")
     .select("*")
-    .eq("is_active", true)
-    .order("priority", { ascending: true });
+    .eq("is_active", true);
+
+  if (userId) {
+    query = query.eq("user_id", userId);
+  }
+
+  const { data, error } = await query.order("priority", { ascending: true });
   if (error) {
     console.error("[AiKeyPool] Failed to fetch keys:", error.message);
     return [];
@@ -124,8 +130,9 @@ async function recordUsage(keyId: string, tokens: number, costUsd: number): Prom
  * To activate any of these, add the corresponding env var to .env or
  * the production environment (e.g. Render dashboard).
  */
-export async function getCandidateKeys(explicitKeys?: AiProviderKey[]): Promise<AiProviderKey[]> {
-  const activeKeys = [...(explicitKeys ?? (await getActiveKeys()))];
+export async function getCandidateKeys(explicitKeys?: AiProviderKey[], userId?: string): Promise<AiProviderKey[]> {
+  const activeKeys = [...(explicitKeys ?? (await getActiveKeys(userId)))];
+
 
   // Only inject .env system fallbacks when no user-configured BYOK keys exist
   if (activeKeys.length === 0) {
@@ -299,8 +306,9 @@ async function callAnthropic(
 export async function completionWithFallback(
   messages: { role: string; content: string }[],
   keys?: AiProviderKey[],
+  userId?: string,
 ): Promise<CompletionResult> {
-  const activeKeys = await getCandidateKeys(keys);
+  const activeKeys = await getCandidateKeys(keys, userId);
 
   if (activeKeys.length === 0) {
     throw new Error("No AI provider keys configured. Add one in Settings → AI Provider Keys.");
@@ -357,30 +365,37 @@ export async function* streamAIReplyWithFallback(
   }[],
   signal?: AbortSignal,
 ): AsyncGenerator<string, void, unknown> {
-  const candidateKeys = await getCandidateKeys();
+  const candidateKeys = await getCandidateKeys(undefined, (assistant as any)?.user_id);
 
   const systemPrompt = `${assistant.system_prompt}
 
 CRITICAL INSTRUCTION: You are on a live telephone call. Keep your reply to 1-2 short, natural sentences maximum. Be direct, helpful, and polite. Do NOT use markdown, bullet points, or numbered lists — your reply will be spoken aloud immediately.`;
 
+  // All built-in and domain actions available to conversational voice AI
+  const defaultActionTools = getAllActionTools();
+  const sanitizeToolName = (name: string) => name.toLowerCase().replace(/[^a-z0-9_-]/g, "_").slice(0, 64);
+
   // Map tools to OpenAI schema
-  const openAiTools: OpenAI.Chat.Completions.ChatCompletionTool[] = tools.map((t) => ({
-    type: "function" as const,
-    function: {
-      name: t.name,
-      description: t.description || "",
-      parameters: (t.config_json as any)?.input_schema || {
-        type: "object",
-        properties: {
-          query: {
-            type: "string",
-            description: "Search query or input for the tool",
+  const openAiTools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
+    ...defaultActionTools,
+    ...tools.map((t) => ({
+      type: "function" as const,
+      function: {
+        name: sanitizeToolName(t.tool_type || t.name),
+        description: t.description || "",
+        parameters: (t.config_json as any)?.input_schema || {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              description: "Search query or input for the tool",
+            },
           },
+          required: ["query"],
         },
-        required: ["query"],
       },
-    },
-  }));
+    })),
+  ];
 
   // Build messages list
   const baseMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
@@ -571,7 +586,13 @@ CRITICAL INSTRUCTION: You are on a live telephone call. Keep your reply to 1-2 s
           // Execute tools
           const toolResults = [];
           for (const tc of parsedToolCalls) {
-            const resultStr = await executeTool(tc.name, tc.input, tools);
+            const resultStr = await executeTool(
+              tc.name,
+              tc.input,
+              tools,
+              (assistant as any)?.user_id,
+              (assistant as any)?.active_call_id
+            );
             toolResults.push({ tool_use_id: tc.id, content: resultStr });
           }
 

@@ -1,107 +1,115 @@
-# <p align="center"><img src="public/logo.png" alt="Vaanix Logo" width="120" height="120"></p>
-# <p align="center">VAANIX</p>
-<p align="center">
-  <strong>Voice AI Agents, Simplified.</strong>
-</p>
+<div align="center">
+
+# 🎙️ VAANIX AI
+
+**Next-Generation, Real-Time Conversational Voice AI Platform**
+
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
+[![Express](https://img.shields.io/badge/Express-5.2-000000?style=for-the-badge&logo=express&logoColor=white)](https://expressjs.com/)
+[![Supabase](https://img.shields.io/badge/Supabase-Database%20%26%20RLS-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white)](https://supabase.com/)
+[![Twilio](https://img.shields.io/badge/Twilio-Telephony%20Streams-F22F46?style=for-the-badge&logo=twilio&logoColor=white)](https://www.twilio.com/)
+[![Deepgram](https://img.shields.io/badge/Deepgram-Nova--2%20STT-13EF93?style=for-the-badge&logoColor=black)](https://deepgram.com/)
+[![Groq](https://img.shields.io/badge/Groq-LPU%20Inference-F55036?style=for-the-badge&logoColor=white)](https://groq.com/)
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Vite-8A2BE2?style=for-the-badge&logo=vite&logoColor=FFD700" alt="Vite">
-  <img src="https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" alt="React">
-  <img src="https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript">
-  <img src="https://img.shields.io/badge/Express-000000?style=for-the-badge&logo=express&logoColor=white" alt="Express">
-  <img src="https://img.shields.io/badge/Supabase-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white" alt="Supabase">
-  <img src="https://img.shields.io/badge/Twilio-F22F46?style=for-the-badge&logo=twilio&logoColor=white" alt="Twilio">
+  A high-performance, full-duplex conversational voice infrastructure connecting carrier telephone networks with ultra-fast LLM inference and neural text-to-speech with sub-second response latency.
 </p>
 
-<p align="center">
-  A premium, high-fidelity conversational platform that orchestrates real-time, full-duplex voice interactions. Vaanix connects telephone networks (Twilio) directly with leading AI models (Claude, Deepgram, ElevenLabs) with sub-second latency.
-</p>
+</div>
 
 ---
 
-## 🎬 Cinematic Demo & Hero
-Vaanix is crafted with premium visual aesthetics, featuring an animated brand mark, dark-mode glassmorphic layouts, and responsive panels designed to feel alive, modern, and technical.
+## 🌟 Key Capabilities
 
----
+### ⚡ Sub-Second Conversational Latency
+- **Real-Time WebSocket Pipeline**: Bidirectional audio streaming over Twilio Media Streams using 8kHz mulaw encoding.
+- **Clause-Level Streaming**: Generates speech audio on the very first clause (`~500ms` TTFA) while LLM tokens and subsequent clauses synthesize concurrently in the background.
+- **Multilingual Punctuation Detection**: Native streaming support for English (`.!?`), Hindi/Marathi Devanagari Danda (`।`, `॥`), and conversational pauses.
 
-## ✨ Key Features
+### 🏢 Multi-Tenant Enterprise Isolation
+- **Row-Level Security (RLS)**: Organizations and users have fully isolated workspaces. Users can only access their own assistants, contacts, call records, and analytics.
+- **Custom BYOK Key Pool**: Users can configure their own AI provider keys (Groq, Gemini, OpenAI, Anthropic, Together) with automated failover and priority routing.
 
-- **⚡ Sub-Second Speech Latency**: Custom WebSocket audio streaming handles voice capture and synthesis, keeping conversation response lags under 700ms.
-- **🎙️ ElevenLabs Generative Voices**: Integrate realistic text-to-speech engine profiles, with custom cloning and fine-tuning control.
-- **🧠 Full Duplex Agent Flow**: Powered by Deepgram STT, Claude LLM prompt trees, and ElevenLabs TTS to support natural interruptions and conversational context.
-- **📊 Developer Console**: Stat-dense workspace displaying active assistants, total calls, minutes consumed, average latency, and real-time active/inactive status.
-- **📞 Twilio Telephony Webhooks**: Easily provision virtual phone numbers, manage Twilio Media Streams, and configure outbound dialing webhooks.
-- **📁 COLLAPSIBLE LAYOUTS**: Responsive sidebar console collapsing to icon-only on desktops, and transitioning into a touch drawer on mobile screens.
+### 🎯 Generalized Domain Templates
+Out-of-the-box business agent configurations with tailored system prompts and tools:
+- **Salon & Spa** (e.g. Lakme Salon): Stylist assignment, appointment booking, rescheduling, and cancellation.
+- **Healthcare & Clinics**: Patient intake, doctor scheduling, prescription refill requests.
+- **Education & Admissions**: Campus tours, tuition inquiries, application status.
+- **Customer Support**: Ticket escalation, account inquiries, call transfers.
+
+### 🧠 Full-Duplex Speech & Barge-In
+- **Deepgram Nova-2 Integration**: Continuous speech recognition with intelligent utterance accumulation.
+- **Smart Acoustic Echo Guard**: Prevents speakerphone feedback from self-interrupting the agent while permitting genuine human interruptions.
 
 ---
 
 ## 🏗️ System Architecture
 
-The diagram below outlines how Vaanix routes media streams in real-time between the telephone provider, the server, and the AI engines:
-
 ```mermaid
 sequenceDiagram
     autonumber
-    actor User as Telephone User
-    participant Twilio as Twilio Media Stream
-    participant Server as Vaanix Server (WebSockets)
-    participant Deepgram as Deepgram (STT)
-    participant LLM as Claude 3.5 (LLM Core)
-    participant ElevenLabs as ElevenLabs (TTS)
+    actor Caller as 📱 Telephone Caller
+    participant Twilio as 🌐 Twilio Carrier
+    participant Server as ⚡ Vaanix Express / WS
+    participant STT as 🎙️ Deepgram Nova-2
+    participant LLM as 🧠 Groq / LPU Engine
+    participant TTS as 🔊 Edge Neural TTS
 
-    User->>Twilio: Speaks into phone
-    Twilio->>Server: Streams raw mulaw audio (WebSocket)
-    Server->>Deepgram: Forwards raw audio stream
-    Deepgram->>Server: Returns transcribed text
-    Server->>LLM: Dispatches prompt & history context
-    LLM->>Server: Streams generated text response
-    Server->>ElevenLabs: Sends text chunks for TTS synthesis
-    ElevenLabs->>Server: Streams back synthesized audio (PCM/mulaw)
-    Server->>Twilio: Sends audio payload (WebSocket)
-    Twilio->>User: Audio played to handset (Sub-700ms)
+    Caller->>Twilio: Spoken voice input
+    Twilio->>Server: 8kHz mulaw audio chunks (WebSocket)
+    Server->>STT: Real-time audio stream
+    STT->>Server: Transcribed final utterance
+    Server->>LLM: Ingests dialogue context & triggers tools
+    LLM-->>Server: Streams tokens (TTFT ~70ms)
+    Note over Server,TTS: Splits at Hindi '।' or English '.' boundaries
+    Server->>TTS: Synthesizes initial clause immediately (~400ms)
+    TTS-->>Server: Raw 16-bit PCM converted to mulaw
+    Server->>Twilio: Media packet broadcast
+    Twilio-->>Caller: Natural voice reply plays (Sub-1s to 2s)
 ```
 
 ---
 
 ## 📂 Repository Structure
 
-```directory
-├── .agents/                    # Custom GSD and design guidelines
-├── public/                     # Static assets (logo, visual aids)
+```
+├── .agents/                    # Custom skills and design tokens
+├── public/                     # Static assets and brand imagery
+├── scripts/
+│   └── tunnel.cjs              # Auto-reconnecting IPv4 tunnel daemon
 ├── src/
 │   ├── components/             # Reusable UI component modules (cards, modals, widgets)
-│   ├── integrations/           # Supabase client declarations
+│   ├── lib/
+│   │   ├── api.ts              # Authenticated client-side API layer
+│   │   └── domainPacks.ts      # Multi-industry business presets
 │   ├── routes/                 # TanStack filesystem-based routes
-│   │   ├── _authenticated/     # Protected console views (assistants, call logs, phone numbers)
-│   │   ├── auth.tsx            # Login and onboarding screen
-│   │   └── index.tsx           # Premium animated landing page
-│   ├── server/                 # Express backend streaming server
-│   │   ├── routes/             # Endpoints for outbound calls, voice tokens, and TTS previews
-│   │   ├── services/           # Tool execution, system prompt builders, and API configurations
-│   │   └── index.ts            # Server entry point, hosting WS connection handlers
-│   └── styles.css              # Custom design system styles and animation tokens
-├── supabase/                   # Supabase configuration, schema structures, and migrations
-├── package.json                # Project dependencies and deployment scripts
-└── vite.config.ts              # Vite compiler configuration
+│   │   ├── _authenticated/     # Protected console views (assistants, analytics, logs)
+│   │   ├── auth.tsx            # Login and user registration
+│   │   └── index.tsx           # Modern dark-mode landing page
+│   └── server/                 # Express backend streaming server
+│       ├── actions/            # Dynamic tool handlers (booking, cancellation)
+│       ├── mediaStream/        # Real-time WebSocket audio handler
+│       ├── services/           # Groq key pool, tool executor, scheduled jobs
+│       ├── deepgram.ts         # Speech recognition client
+│       ├── edgeTts.ts          # Free high-quality neural voice synthesizer
+│       └── index.ts            # Telephony server entry point
+├── supabase/                   # Schema migrations & multi-tenant security
+└── memory.md                   # Complete architectural evolution & incident memory
 ```
 
 ---
 
 ## 🚀 Quick Start
 
-### 📋 Prerequisites
-Ensure you have the following installed on your local environment:
-- Node.js (v18+)
-- npm (v9+)
-- Twilio Account (with provisioned phone numbers)
-- Supabase project
-- ElevenLabs API Account
-- Deepgram API Account
-- Anthropic API key (for Claude)
+### Prerequisites
+- **Node.js**: v18+ 
+- **Twilio Account**: Phone number with voice capabilities
+- **Supabase Project**: With database migrations applied
+- **Deepgram API Key**: For speech-to-text
+- **Groq API Key**: For ultra-fast LLM inference
 
----
-
-### ⚙️ Installation
+### Installation
 
 1. **Clone the repository**:
    ```bash
@@ -109,65 +117,44 @@ Ensure you have the following installed on your local environment:
    cd campusconnect-ai-assistant
    ```
 
-2. **Install Node dependencies**:
+2. **Install dependencies**:
    ```bash
    npm install
    ```
 
 3. **Configure Environment Variables**:
-   Create a `.env` file in the root directory and add the following keys. **Do not commit this file to Git.**
+   Create a `.env` file in the project root:
    ```env
-   # Telephony (Twilio)
-   TWILIO_ACCOUNT_SID=your_twilio_sid
-   TWILIO_AUTH_TOKEN=your_twilio_auth_token
-   TWILIO_NUMBER=your_twilio_phone_number
+   # Twilio Telephony
+   TWILIO_ACCOUNT_SID=AC...
+   TWILIO_AUTH_TOKEN=...
+   TWILIO_PHONE_NUMBER=+1...
 
    # Database (Supabase)
-   VITE_SUPABASE_URL=your_supabase_url
-   VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
-   SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
+   VITE_SUPABASE_URL=https://your-project.supabase.co
+   VITE_SUPABASE_ANON_KEY=eyJ...
+   SUPABASE_SERVICE_ROLE_KEY=eyJ...
 
-   # AI Providers
-   DEEPGRAM_API_KEY=your_deepgram_api_key
-   ELEVENLABS_API_KEY=your_elevenlabs_api_key
-   ANTHROPIC_API_KEY=your_anthropic_api_key
-
-   # Public Server Domain (Tunnel address)
-   SERVER_DOMAIN=your_tunnel_address.serveo.net
+   # Speech & AI Providers
+   DEEPGRAM_API_KEY=...
+   GROQ_API_KEY=gsk_...
+   PORT=3000
    ```
 
----
-
-### 💻 Running Locally
-
-To run the application locally with database connections and WebSocket tunneling:
-
-1. **Launch the backend services**:
+4. **Start the Telephony Server & Tunnel**:
    ```bash
+   # Terminal 1: Run Express Server
    npm run server:run
-   ```
 
-2. **Launch the frontend development server**:
-   ```bash
+   # Terminal 2: Run Auto-reconnecting Tunnel
+   node scripts/tunnel.cjs
+
+   # Terminal 3: Run Frontend Web Console
    npm run dev
    ```
-
-3. **Expose the local server to Twilio (SSH Tunneling)**:
-   Twilio requires a public HTTPS URL to stream calls to your local system. Run the tunnel tool:
-   ```bash
-   node tunnel.js
-   ```
-   *Note: This binds your local port `3000` to a public URL (e.g., `https://vaanix.serveo.net`) and auto-registers it with your Twilio webhook settings.*
-
----
-
-## 🔐 Security & Secrets
-
-> [!WARNING]
-> **Never commit your API keys or `.env` files to git.**
-> The `.gitignore` has been updated to explicitly ignore all `.env` files. If you add new environment-specific configurations, verify that they are covered under ignored patterns by running `git status`.
 
 ---
 
 ## 📄 License
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.

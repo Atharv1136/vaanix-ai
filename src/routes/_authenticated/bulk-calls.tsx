@@ -27,6 +27,7 @@ import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import * as XLSX from "xlsx";
+import { apiFetch, safeJson } from "@/lib/api";
 
 export const Route = createFileRoute("/_authenticated/bulk-calls")({
   component: BulkCalls,
@@ -288,11 +289,13 @@ function BulkCalls() {
       if (contErr) throw contErr;
 
       // Trigger the campaign via server
-      await fetch("/api/outbound/bulk/start", {
+      const res = await apiFetch("/api/outbound/bulk/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ campaignId: campaign.id, simulate: demoMode }),
       });
+      const { ok, error } = await safeJson(res);
+      if (!ok) throw new Error(error || "Failed to start campaign.");
 
       return campaign.id;
     },
@@ -310,12 +313,13 @@ function BulkCalls() {
 
   const pauseMutation = useMutation({
     mutationFn: async (campaignId: string) => {
-      const res = await fetch("/api/outbound/bulk/pause", {
+      const res = await apiFetch("/api/outbound/bulk/pause", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ campaignId }),
       });
-      if (!res.ok) throw new Error("Failed to pause campaign.");
+      const { ok, error } = await safeJson(res);
+      if (!ok) throw new Error(error || "Failed to pause campaign.");
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["bulk-campaigns"] });
@@ -326,12 +330,13 @@ function BulkCalls() {
 
   const resumeMutation = useMutation({
     mutationFn: async (campaignId: string) => {
-      const res = await fetch("/api/outbound/bulk/resume", {
+      const res = await apiFetch("/api/outbound/bulk/resume", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ campaignId }),
       });
-      if (!res.ok) throw new Error("Failed to resume campaign.");
+      const { ok, error } = await safeJson(res);
+      if (!ok) throw new Error(error || "Failed to resume campaign.");
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["bulk-campaigns"] });
@@ -342,12 +347,13 @@ function BulkCalls() {
 
   const retryFailedMutation = useMutation({
     mutationFn: async (campaignId: string) => {
-      const res = await fetch("/api/outbound/bulk/retry-failed", {
+      const res = await apiFetch("/api/outbound/bulk/retry-failed", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ campaignId }),
       });
-      if (!res.ok) throw new Error("Failed to retry failed contacts.");
+      const { ok, error } = await safeJson(res);
+      if (!ok) throw new Error(error || "Failed to retry failed contacts.");
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["bulk-campaigns"] });

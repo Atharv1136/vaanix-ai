@@ -114,7 +114,7 @@ CRITICAL INSTRUCTION: Keep your spoken turns brief. You are on a live voice call
             yield chunk.delta.text;
           } else if (chunk.delta.type === "input_json_delta") {
             if (currentToolIndex >= 0) {
-               currentToolCalls[currentToolIndex].input += chunk.delta.input;
+               currentToolCalls[currentToolIndex].input += (chunk.delta as any).partial_json || "";
             }
           }
         }

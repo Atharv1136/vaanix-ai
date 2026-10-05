@@ -11,9 +11,30 @@ export interface TelephonyCredentials {
 }
 
 /**
- * Fetch dynamic telephony credentials from database (app_settings) or .env fallback.
+ * Fetch dynamic telephony credentials from database (business_profiles, app_settings) or .env fallback.
  */
-export async function getTelephonyCredentials(): Promise<TelephonyCredentials> {
+export async function getTelephonyCredentials(userId?: string): Promise<TelephonyCredentials> {
+  if (userId) {
+    try {
+      const { data: profile } = await db
+        .from("business_profiles")
+        .select("telephony_provider, telephony_account_sid, telephony_auth_token, telephony_phone_number")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (profile?.telephony_account_sid && profile?.telephony_auth_token) {
+        return {
+          provider: profile.telephony_provider || "twilio",
+          accountSid: profile.telephony_account_sid,
+          authToken: profile.telephony_auth_token,
+          phoneNumber: profile.telephony_phone_number || process.env.TWILIO_PHONE_NUMBER || "",
+        };
+      }
+    } catch (err: any) {
+      console.warn("[Telephony] Failed to load user credentials from business_profiles:", err.message);
+    }
+  }
+
   try {
     const { data: settings } = await db
       .from("app_settings")
@@ -45,11 +66,11 @@ export async function getTelephonyCredentials(): Promise<TelephonyCredentials> {
 /**
  * Get dynamic Twilio client based on DB credentials or ENV.
  */
-export async function getDynamicTwilioClient(): Promise<{
+export async function getDynamicTwilioClient(userId?: string): Promise<{
   client: twilio.Twilio | null;
   credentials: TelephonyCredentials;
 }> {
-  const creds = await getTelephonyCredentials();
+  const creds = await getTelephonyCredentials(userId);
   if (!creds.accountSid || !creds.authToken) {
     return { client: null, credentials: creds };
   }
@@ -58,6 +79,7 @@ export async function getDynamicTwilioClient(): Promise<{
     credentials: creds,
   };
 }
+
 
 let staticTwilioClient: twilio.Twilio | null = null;
 
