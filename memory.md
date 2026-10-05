@@ -200,6 +200,25 @@ Live server transcripts from the Lakme Salon call revealed 4 compounding bottlen
 
 ---
 
+### Phase 8: Practical Indian Rupee (INR ₹) Cost-Cutting Pricing Structure
+
+#### 1. User Directive
+> *"Just do one thing the price on the main page should not be in dollar it should be some practical INR rupees so like put some practical prices like till this as we're looking to a cost cutting so just put cost cutting prices like that Once done just push it to the gITHUB"*
+
+#### 2. Root Cause & Commercial Strategy Analysis
+- The main landing page had generic US dollar tiering (`$29`, `$99`, `$399` / month).
+- For Indian SMBs, local clinics, salon chains, educational institutes, and startups, dollar pricing creates friction, high perceived cost (e.g. $99 ≈ ₹8,500/mo), and foreign transaction barriers.
+- Practical Indian voice-AI pricing should reflect accessible entry points with high volume ROI that directly undercuts human tele-caller monthly salaries (which typically range from ₹15,000–₹25,000/month per agent).
+
+#### 3. Technical Changes Made
+- **Landing Page Pricing Architecture ([src/routes/index.tsx](file:///d:/be%20project/calling/campusconnect-ai-assistant/src/routes/index.tsx))**:
+  - **Starter**: **₹999 / month** (`~₹1.99/min` effective rate). 1 Assistant, 500 Call Minutes, Hindi/Marathi/English, appointment booking. Designed for local single-branch clinics and salons.
+  - **Pro (Most Popular)**: **₹2,499 / month** (`~₹0.99/min` effective rate). 5 Assistants, 2,500 Call Minutes, neural voices, live calendar booking, WhatsApp/SMS confirmations, barge-in.
+  - **Enterprise**: **₹7,999 / month** (`~₹0.79/min` high-volume rate). Unlimited Assistants, 10,000 Call Minutes, custom cloning, SIP trunking, ERP/Webhook integrations, dedicated SLA.
+- Re-verified all links point cleanly to `/auth` with localized call-to-actions.
+
+---
+
 ## Current Architecture & System Health
 
 | Component | Status | Configuration / Endpoint |

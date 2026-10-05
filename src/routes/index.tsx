@@ -412,11 +412,14 @@ function Index() {
       {/* Pricing Cards */}
       <section id="pricing" className="py-24 px-6 max-w-7xl mx-auto scroll-mt-16">
         <div className="text-center mb-20">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-teal-500/20 bg-teal-500/10 text-teal-400 text-xs font-semibold uppercase tracking-wider mb-4">
+            Cost-Effective AI Telephony
+          </div>
           <h2 className="text-3xl md:text-5xl font-bold tracking-tight mb-4">
-            Transparent, Usage-Based Plans
+            Practical, Cost-Cutting Indian Rupee Pricing
           </h2>
-          <p className="text-slate-400 max-w-xl mx-auto text-sm md:text-base">
-            Start free, scale up as call volume grows. Cancel or upgrade anytime.
+          <p className="text-slate-400 max-w-2xl mx-auto text-sm md:text-base">
+            Reduce calling overhead by up to 85% compared to traditional tele-calling staff. Transparent plans in ₹ INR with zero hidden setup fees.
           </p>
         </div>
 
@@ -431,23 +434,26 @@ function Index() {
             className="rounded-2xl border border-white/5 bg-[#0A0D16] p-8 flex flex-col justify-between"
           >
             <div>
-              <div className="text-slate-400 text-xs uppercase tracking-widest font-semibold mb-2">Starter</div>
-              <div className="flex items-baseline gap-1 mb-6">
-                <span className="text-4xl font-extrabold">$29</span>
+              <div className="text-slate-400 text-xs uppercase tracking-widest font-semibold mb-1">Starter</div>
+              <div className="text-xs text-slate-500 mb-4">For single clinics, salons & local businesses</div>
+              <div className="flex items-baseline gap-1 mb-2">
+                <span className="text-4xl font-extrabold text-white">₹999</span>
                 <span className="text-slate-500 text-sm">/ month</span>
               </div>
+              <div className="text-[11px] text-teal-400 font-medium mb-6">~₹1.99 / minute effective rate</div>
               <ul className="space-y-4 text-sm text-slate-300 mb-8">
                 <li className="flex items-center gap-2">✓ 1 Active AI Voice Assistant</li>
                 <li className="flex items-center gap-2">✓ 500 Call Minutes included</li>
-                <li className="flex items-center gap-2">✓ Standard voices included</li>
+                <li className="flex items-center gap-2">✓ Hindi, Marathi & English voices</li>
+                <li className="flex items-center gap-2">✓ Appointment scheduling & CRM sync</li>
                 <li className="flex items-center gap-2">✓ Basic analytics & Call transcripts</li>
               </ul>
             </div>
             <Link 
               to="/auth" 
-              className="w-full text-center py-3 rounded-full border border-white/10 hover:bg-white/5 transition-all text-xs font-bold uppercase tracking-wider mt-auto"
+              className="w-full text-center py-3 rounded-full border border-white/10 hover:bg-white/5 transition-all text-xs font-bold uppercase tracking-wider mt-auto text-slate-200"
             >
-              Choose Starter
+              Choose Starter — ₹999
             </Link>
           </motion.div>
 
@@ -456,28 +462,31 @@ function Index() {
             className="rounded-2xl relative p-8 flex flex-col justify-between bg-[#0B0F1D] shadow-[0_0_40px_rgba(20,184,166,0.1)] border-2 border-[#14B8A6]"
           >
             <div className="absolute top-4 right-4 bg-brand-gradient text-[#05070D] font-bold text-[9px] uppercase tracking-wider px-2.5 py-1 rounded">
-              Most Popular
+              Best ROI • Most Popular
             </div>
 
             <div>
-              <div className="text-[#E8C77A] text-xs uppercase tracking-widest font-bold mb-2">Pro</div>
-              <div className="flex items-baseline gap-1 mb-6">
-                <span className="text-4xl font-extrabold text-white">$99</span>
+              <div className="text-[#E8C77A] text-xs uppercase tracking-widest font-bold mb-1">Pro</div>
+              <div className="text-xs text-slate-400 mb-4">For multi-chair salons, clinics & growing brands</div>
+              <div className="flex items-baseline gap-1 mb-2">
+                <span className="text-4xl font-extrabold text-white">₹2,499</span>
                 <span className="text-slate-400 text-sm">/ month</span>
               </div>
+              <div className="text-[11px] text-[#E8C77A] font-medium mb-6">~₹0.99 / minute effective rate</div>
               <ul className="space-y-4 text-sm text-slate-200 mb-8">
                 <li className="flex items-center gap-2">✓ 5 Active AI Voice Assistants</li>
                 <li className="flex items-center gap-2">✓ 2,500 Call Minutes included</li>
-                <li className="flex items-center gap-2">✓ Access to ElevenLabs Premium voices</li>
-                <li className="flex items-center gap-2">✓ Advanced analytics & Webhook tools</li>
-                <li className="flex items-center gap-2">✓ Priority email/chat support</li>
+                <li className="flex items-center gap-2">✓ High-fidelity Neural voices (Edge & ElevenLabs)</li>
+                <li className="flex items-center gap-2">✓ Live Calendar Booking & WhatsApp/SMS</li>
+                <li className="flex items-center gap-2">✓ Smart barge-in & custom FAQ knowledge base</li>
+                <li className="flex items-center gap-2">✓ Priority WhatsApp & phone support</li>
               </ul>
             </div>
             <Link 
               to="/auth" 
               className="w-full text-center py-3 rounded-full bg-gold-gradient text-[#05070D] font-bold text-xs uppercase tracking-wider mt-auto shadow-md hover:shadow-[0_0_20px_rgba(232,199,122,0.4)] transition-all"
             >
-              Choose Pro
+              Choose Pro — ₹2,499
             </Link>
           </div>
 
@@ -490,24 +499,27 @@ function Index() {
             className="rounded-2xl border border-white/5 bg-[#0A0D16] p-8 flex flex-col justify-between"
           >
             <div>
-              <div className="text-slate-400 text-xs uppercase tracking-widest font-semibold mb-2">Enterprise</div>
-              <div className="flex items-baseline gap-1 mb-6">
-                <span className="text-4xl font-extrabold">$399</span>
+              <div className="text-slate-400 text-xs uppercase tracking-widest font-semibold mb-1">Enterprise</div>
+              <div className="text-xs text-slate-500 mb-4">For salon chains, hospitals & high-volume teams</div>
+              <div className="flex items-baseline gap-1 mb-2">
+                <span className="text-4xl font-extrabold text-white">₹7,999</span>
                 <span className="text-slate-500 text-sm">/ month</span>
               </div>
+              <div className="text-[11px] text-teal-400 font-medium mb-6">~₹0.79 / minute high-volume rate</div>
               <ul className="space-y-4 text-sm text-slate-300 mb-8">
                 <li className="flex items-center gap-2">✓ Unlimited Voice Assistants</li>
-                <li className="flex items-center gap-2">✓ 15,000 Call Minutes included</li>
-                <li className="flex items-center gap-2">✓ Custom voice cloning & fine-tuning</li>
-                <li className="flex items-center gap-2">✓ Custom SIP and telephony trunks</li>
-                <li className="flex items-center gap-2">✓ Dedicated slack support & SLA</li>
+                <li className="flex items-center gap-2">✓ 10,000 Call Minutes included</li>
+                <li className="flex items-center gap-2">✓ Custom voice cloning & vocabulary tuning</li>
+                <li className="flex items-center gap-2">✓ Dedicated SIP trunks & Twilio BYOT</li>
+                <li className="flex items-center gap-2">✓ Custom ERP / Webhook automations</li>
+                <li className="flex items-center gap-2">✓ Dedicated account manager & 99.9% SLA</li>
               </ul>
             </div>
             <Link 
               to="/auth" 
-              className="w-full text-center py-3 rounded-full border border-white/10 hover:bg-white/5 transition-all text-xs font-bold uppercase tracking-wider mt-auto"
+              className="w-full text-center py-3 rounded-full border border-white/10 hover:bg-white/5 transition-all text-xs font-bold uppercase tracking-wider mt-auto text-slate-200"
             >
-              Choose Enterprise
+              Choose Enterprise — ₹7,999
             </Link>
           </motion.div>
 
