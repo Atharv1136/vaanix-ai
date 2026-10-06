@@ -110,32 +110,60 @@ function calculateSimilarity(str1: string, str2: string): number {
 }
 
 /**
+ * Sanitize digit speech: removes commas, semicolons, hyphens, and periods between digits
+ * so TTS and sentence extractors do not produce stuttering, unnatural pauses, or split numbers.
+ */
+export function sanitizeDigitSpeech(text: string): string {
+  if (!text) return "";
+  return text
+    // Replace comma, semicolon, dash between digits with single space (e.g. "9, 8; 7-6" -> "9 8 7 6")
+    .replace(/([0-9०-९])\s*[,;\-–—]\s*(?=[0-9०-९])/g, "$1 ")
+    // Remove comma or semicolon directly attached to a digit in digit groups
+    .replace(/([0-9०-९])\s*[,;]\s*/g, "$1 ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
  * Detect sentence boundaries in accumulated text.
- * Supports English, Hindi / Marathi (। ॥), newlines, and clause-level commas.
+ * Supports English, Hindi / Marathi (। ॥), newlines, and clause-level commas/semicolons.
+ * Protects numbers, telephone digits, and dates from being sliced mid-sequence.
  * Returns [completedSentences, remainder].
  */
-function extractSentences(buffer: string): [string[], string] {
-  const pattern = /([.!?।॥\n])\s*|(,\s+)/g;
+export function extractSentences(buffer: string): [string[], string] {
+  // Pre-clean comma/semicolon-separated digits in the buffer so they are never sliced mid-number
+  const cleanBuffer = buffer.replace(/([0-9०-९])\s*[,;\-–—]\s*(?=[0-9०-९])/g, "$1 ");
+
+  // Matches sentence terminators (. ! ? । ॥ \n) or clause-level commas/semicolons
+  // Crucial: (?<![\d०-९])[,;]\s+(?![\d०-९]) ensures commas/semicolons between or near digits are NEVER matched!
+  const pattern = /([.!?।॥\n])\s*|((?<![\d०-९])[,;]\s+(?![\d०-९]))/g;
   const sentences: string[] = [];
   let lastIndex = 0;
   let match;
 
-  while ((match = pattern.exec(buffer)) !== null) {
-    const isComma = match[0].includes(",");
-    const potentialSentence = buffer.substring(lastIndex, match.index + match[0].length).trim();
+  while ((match = pattern.exec(cleanBuffer)) !== null) {
+    const isClauseBreak = match[0].includes(",") || match[0].includes(";");
+    const potentialSentence = cleanBuffer.substring(lastIndex, match.index + match[0].length).trim();
 
-    // If it's a comma, only split if we have accumulated at least 12 characters to avoid tiny fragments
-    if (isComma && potentialSentence.length < 12) {
-      continue;
+    // If it's a clause break (comma or semicolon):
+    // 1. Must accumulate at least 24 characters so speech clauses are natural and not choppy
+    // 2. Must not end with a digit to prevent breaking numbers
+    if (isClauseBreak) {
+      if (potentialSentence.length < 24) {
+        continue;
+      }
+      if (/[\d०-९]\s*[,;]?$/.test(potentialSentence)) {
+        continue;
+      }
     }
 
     if (potentialSentence.length > 0) {
-      sentences.push(potentialSentence);
+      sentences.push(sanitizeDigitSpeech(potentialSentence));
       lastIndex = match.index + match[0].length;
     }
   }
 
-  const remainder = buffer.substring(lastIndex);
+  const remainder = cleanBuffer.substring(lastIndex);
   return [sentences, remainder];
 }
 
@@ -267,16 +295,17 @@ export function handleMediaStream(ws: WebSocket) {
 
     const speakSentence = async (sentence: string) => {
       if (controller.signal.aborted || callEnded) return;
-      const trimmed = sentence.trim();
-      if (!trimmed) return;
+      // Sanitize phone numbers and numbers: remove commas, semicolons between digits
+      const sanitized = sanitizeDigitSpeech(sentence);
+      if (!sanitized) return;
 
-      console.log(`[AI] ${label} sentence ${++sentenceIndex}: "${trimmed}"`);
+      console.log(`[AI] ${label} sentence ${++sentenceIndex}: "${sanitized}"`);
       isAISpeaking = true;
       if (!aiSpeakingStartTime) aiSpeakingStartTime = Date.now();
 
       try {
         const pcmBuffer = await getElevenLabsVoiceStream(
-          trimmed,
+          sanitized,
           assistant!.voice_id,
           controller.signal,
           (assistant as any).language,
@@ -344,10 +373,11 @@ export function handleMediaStream(ws: WebSocket) {
         const assistantId = data.start.customParameters?.assistant_id;
         const callRecordId = data.start.customParameters?.call_record_id || callSid;
         const callerName = data.start.customParameters?.caller_name || "";
+        const callerPhone = data.start.customParameters?.caller_phone || "";
         if (callRecordId) callSid = callRecordId;
 
         console.log(
-          `[MediaStream] Started stream ${streamSid} for Call ${callSid.substring(0, 8)}... Caller Name: "${callerName}"`,
+          `[MediaStream] Started stream ${streamSid} for Call ${callSid.substring(0, 8)}... Caller Name: "${callerName}", Phone: "${callerPhone}"`,
         );
 
         if (!assistantId) {
@@ -364,15 +394,28 @@ export function handleMediaStream(ws: WebSocket) {
           return;
         }
 
-        // Apply caller name placeholder replacements
+        // Apply caller name and phone placeholder replacements
         const normalizedName = callerName ? callerName.trim() : "";
+        const normalizedPhone = callerPhone ? callerPhone.trim() : "";
         if (assistant) {
+          (assistant as any).caller_phone = normalizedPhone;
+          let updatedPrompt = assistant.system_prompt
+            .replace(/\{name\}/gi, normalizedName || "the caller")
+            .replace(/\[name\]/gi, normalizedName || "the caller")
+            .replace(/\(name\)/gi, normalizedName || "the caller");
+
+          if (normalizedPhone) {
+            const cleanDigits = normalizedPhone.replace(/[^0-9+]/g, "");
+            updatedPrompt = updatedPrompt
+              .replace(/\{phone\}/gi, cleanDigits)
+              .replace(/\[phone\]/gi, cleanDigits)
+              .replace(/\{caller_phone\}/gi, cleanDigits);
+            updatedPrompt += `\n[CURRENT CALLER PHONE: ${cleanDigits} — The caller is already connected on this line. Directly offer to confirm their booking with this current calling number (e.g. "क्या मैं इसे आपके इसी नंबर पर बुक कर दूँ?") instead of asking them to recite digits.]`;
+          }
+
           assistant = {
             ...assistant,
-            system_prompt: assistant.system_prompt
-              .replace(/\{name\}/gi, normalizedName || "the caller")
-              .replace(/\[name\]/gi, normalizedName || "the caller")
-              .replace(/\(name\)/gi, normalizedName || "the caller"),
+            system_prompt: updatedPrompt,
           };
           if (assistant.first_message) {
             assistant = {
@@ -394,14 +437,33 @@ export function handleMediaStream(ws: WebSocket) {
 
         tools = await getAssistantTools(assistantId);
 
-        // Load QAs and KB Documents
+        // Load QAs, KB Documents, and Active Business Services
         try {
-          const [qas, docs] = await Promise.all([
+          const [qas, docs, servicesRes] = await Promise.all([
             getAssistantQAs(assistantId),
             getAssistantKBDocuments(assistantId),
+            (assistant as any)?.user_id
+              ? (supabaseAdmin as any)
+                  .from("services")
+                  .select("name, price, duration_minutes, description")
+                  .eq("user_id", (assistant as any).user_id)
+                  .eq("is_active", true)
+              : Promise.resolve({ data: [] }),
           ]);
           cachedQAs = qas;
           kbDocs = docs;
+
+          const activeServices = servicesRes?.data || [];
+          if (activeServices.length > 0 && assistant) {
+            const serviceSummary = activeServices
+              .map((s: any) => `- ${s.name}${s.price ? ` (₹${s.price})` : ""}${s.description ? `: ${s.description}` : ""}`)
+              .join("\n");
+            assistant.system_prompt += `\n\n[AVAILABLE SERVICES OFFERED BY THIS BUSINESS:\n${serviceSummary}\nRULE: When the caller asks about services or when you ask which service they need, ALWAYS tell them what services are available with you from this list so they know their options.]`;
+            console.log(
+              `[MediaStream] Injected ${activeServices.length} active services into prompt for Call ${callSid.substring(0, 8)}.`,
+            );
+          }
+
           console.log(
             `[MediaStream] Loaded ${cachedQAs.length} cached QAs and ${kbDocs.length} KB docs for Call ${callSid.substring(0, 8)}.`,
           );
@@ -462,13 +524,14 @@ export function handleMediaStream(ws: WebSocket) {
 
           const handleCallerFinalUtterance = async (fullText: string) => {
             if (callEnded || !assistant) return;
-            console.log(`[Caller] Says (final turn): "${fullText}"`);
+            const cleanedText = sanitizeDigitSpeech(fullText);
+            console.log(`[Caller] Says (final turn): "${cleanedText}"`);
 
-            interruptAI(fullText);
+            interruptAI(cleanedText);
 
-            saveCallTranscriptTurn(callSid, "caller", fullText, turnIndex++).catch(() => {});
-            conversationHistory.push({ speaker: "caller", text: fullText });
-            broadcastTranscription(callSid, "caller", fullText);
+            saveCallTranscriptTurn(callSid, "caller", cleanedText, turnIndex++).catch(() => {});
+            conversationHistory.push({ speaker: "caller", text: cleanedText });
+            broadcastTranscription(callSid, "caller", cleanedText);
 
             const turnController = new AbortController();
             activeAbortController = turnController;

@@ -148,7 +148,7 @@ export async function handleSingleOutboundCall(req: AuthenticatedRequest, res: R
     const twilioCall = await twilioClient.calls.create({
       to: cleanNumber,
       from: fromNumber,
-      url: `${publicBaseUrl}/webhooks/twilio/voice?assistant_id=${encodeURIComponent(assistantId)}&call_record_id=${encodeURIComponent(call.id)}&caller_name=${encodeURIComponent(caller_name || "")}`,
+      url: `${publicBaseUrl}/webhooks/twilio/voice?assistant_id=${encodeURIComponent(assistantId)}&call_record_id=${encodeURIComponent(call.id)}&caller_name=${encodeURIComponent(caller_name || "")}&caller_phone=${encodeURIComponent(cleanNumber)}`,
       statusCallback: `${publicBaseUrl}/webhooks/twilio/status`,
       statusCallbackMethod: "POST",
     });

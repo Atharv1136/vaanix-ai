@@ -14,7 +14,8 @@ export async function handleBookAppointment(
   ctx: ActionContext
 ): Promise<ActionResult> {
   const { name, start_time } = input;
-  const phone = input.phone || ctx.callerNumber;
+  const rawPhone = input.phone || ctx.callerNumber || "";
+  const phone = rawPhone.replace(/[^0-9+]/g, "").trim();
 
   if (!name || !start_time) {
     return {

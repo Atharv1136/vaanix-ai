@@ -9,7 +9,9 @@ export async function handleTwilioVoiceWebhook(req: Request, res: Response): Pro
   const queryAssistantId = req.query.assistant_id as string | undefined;
   const queryCallRecordId = req.query.call_record_id as string | undefined;
   const queryCallerName = req.query.caller_name as string | undefined;
+  const queryCallerPhone = req.query.caller_phone as string | undefined;
   const callerName = queryCallerName || req.body.caller_name || "";
+  const callerPhone = queryCallerPhone || From || req.body.From || "";
 
   const maskNumber = (num: string) => (num ? `***${num.slice(-4)}` : "unknown");
   console.log(
@@ -106,6 +108,13 @@ export async function handleTwilioVoiceWebhook(req: Request, res: Response): Pro
       stream.parameter({
         name: "caller_name",
         value: callerName,
+      });
+    }
+
+    if (callerPhone) {
+      stream.parameter({
+        name: "caller_phone",
+        value: callerPhone,
       });
     }
 

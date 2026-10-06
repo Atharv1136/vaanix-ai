@@ -7,7 +7,8 @@ export async function executeTool(
   input: any,
   assistantTools: any[] = [],
   userId?: string,
-  callId?: string
+  callId?: string,
+  callerPhone?: string
 ): Promise<string> {
   // Check Action Registry first (all 11 built-in and domain actions)
   if (ACTION_REGISTRY[toolName]) {
@@ -15,7 +16,7 @@ export async function executeTool(
     const result = await executeAction(toolName, input, {
       userId,
       callId,
-      callerNumber: input?.phone || input?.customer_phone,
+      callerNumber: input?.phone || input?.customer_phone || callerPhone,
     });
     return result.message;
   }

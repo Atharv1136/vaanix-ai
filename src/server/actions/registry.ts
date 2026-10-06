@@ -33,18 +33,18 @@ export const ACTION_REGISTRY: Record<string, ActionDefinition> = {
   book_appointment: {
     key: "book_appointment",
     label: "Book Appointment",
-    description: "Book an appointment or reservation. Call this only after the caller has confirmed a specific slot that check_availability returned AND you have their name and phone number AND you have repeated the details back and they said yes.",
+    description: "Book an appointment or reservation. Call this when the caller has agreed to a slot and provided their name. Use their current calling phone number from the context unless they specifically provided an alternative number. Do not force the caller to dictate their phone number if their number is already present in context.",
     phase: "live",
     spokenFallback: "I had trouble completing the booking. Let me try once more.",
     inputSchema: {
       type: "object",
       properties: {
         name: { type: "string", description: "Caller's full name" },
-        phone: { type: "string", description: "Caller's contact telephone number" },
+        phone: { type: "string", description: "Caller's contact phone number. Defaults to current caller phone number if not specified" },
         start_time: { type: "string", description: "Confirmed start time in ISO8601 format" },
         service: { type: "string", description: "Service or reason for the booking" },
-        resource: { type: "string", description: "Specific staff, doctor, or resource ID" },
-        reason: { type: "string", description: "Brief notes or symptoms/requirements stated by caller" },
+        resource: { type: "string", description: "Specific staff, stylist, doctor, or resource ID" },
+        reason: { type: "string", description: "Brief notes or requirements stated by caller" },
       },
       required: ["name", "start_time"],
     },

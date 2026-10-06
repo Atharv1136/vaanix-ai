@@ -369,7 +369,18 @@ export async function* streamAIReplyWithFallback(
 
   const systemPrompt = `${assistant.system_prompt}
 
-CRITICAL INSTRUCTION: You are on a live telephone call. Keep your reply to 1-2 short, natural sentences maximum. Be direct, helpful, and polite. Do NOT use markdown, bullet points, or numbered lists — your reply will be spoken aloud immediately.`;
+CRITICAL VOICE CONVERSATION INSTRUCTIONS:
+1. LIVE TELEPHONE CALL: Keep your reply to 1-2 short, natural sentences maximum. Be direct, conversational, and polite. Do NOT use markdown, bullet points, or numbered lists — your reply will be spoken aloud immediately.
+2. AVAILABLE SERVICES: When asking the caller which service or treatment they need, ALWAYS tell them what services are available with you (e.g. from the business services list) so the caller knows the options.
+3. PHONE NUMBER & CONFIRMATION:
+   - The caller is speaking with you over the phone. If their phone number is already in context (e.g. [CURRENT CALLER PHONE]), DO NOT ask them to spell out or recite their 10-digit number.
+   - Simply confirm: "Should I confirm the booking and send details to your current calling number?" (In Hindi: "क्या मैं इसे आपके इसी कॉलिंग नंबर पर कन्फ़र्म कर दूँ?").
+   - If the caller agrees, use the existing calling number immediately.
+   - Only take a new number if the caller specifically asks to use a different one.
+4. DIGIT & NUMBER FORMATTING:
+   - When speaking any phone number or code, NEVER use commas, semicolons, dashes, or periods between individual digits (NEVER "9, 8, 7, 6" or "9; 8; 7").
+   - Speak digits smoothly in natural pairs or whole numbers without punctuation (e.g. "98 20 12 34 56").
+5. BOOKING COMPLETION: When you have the requested service, date, time, and name, call 'book_appointment' to confirm the booking in the system.`;
 
   // All built-in and domain actions available to conversational voice AI
   const defaultActionTools = getAllActionTools();
@@ -586,13 +597,16 @@ CRITICAL INSTRUCTION: You are on a live telephone call. Keep your reply to 1-2 s
           // Execute tools
           const toolResults = [];
           for (const tc of parsedToolCalls) {
+            console.log(`[AiKeyPool] Executing tool '${tc.name}' with input:`, JSON.stringify(tc.input));
             const resultStr = await executeTool(
               tc.name,
               tc.input,
               tools,
               (assistant as any)?.user_id,
-              (assistant as any)?.active_call_id
+              (assistant as any)?.active_call_id,
+              (assistant as any)?.caller_phone
             );
+            console.log(`[AiKeyPool] Tool '${tc.name}' result:`, resultStr);
             toolResults.push({ tool_use_id: tc.id, content: resultStr });
           }
 

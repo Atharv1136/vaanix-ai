@@ -229,3 +229,45 @@ Live server transcripts from the Lakme Salon call revealed 4 compounding bottlen
 | **AI LLM Inference** | Active | Groq key pool with `qwen/qwen3.8-27b` (TTFT ~70ms) |
 | **Text-to-Speech** | Active | Edge TTS (`hi-IN-SwaraNeural`), sub-500ms clause streaming |
 | **Database & Auth** | Isolated | Multi-tenant Supabase RLS with organization/user profiles |
+
+
+
+---
+
+### Phase 9: Appointment Number Confirmation Optimization & Dynamic Services Listing
+
+#### 1. User Directive
+> *"It's asking for the like whenever the agent is asking for the number while confirming the appointment it's very difficult to tell the number like the commas or semi colons are coming in between the number and means like it's not proper and also one thing that while asking for the service the agent should tell what all services are available with them and means just these things and you have to fix it once done just test it and justice push it to the gith Don't just paste it on the browser just internally test it using some command and if all the tests are passed then you can just push it to the g means like it should complete the whole booking process Still it's taking some time to reply back but we can just gradually reduce it I'm consistently working on it if you have any other approach just tell me what is that approach don't implement it implement these all other things and just tell me the approach at the end"*
+
+#### 2. Root Cause Analysis
+- **Phone Number Dictation Friction & Punctuation**:
+  1. The system prompt and tool schema forced the assistant to stop and ask callers to dictate their 10-digit phone number over the phone, even though Twilio and the WebSocket pipeline already had their active caller number.
+  2. When callers spoke digits, Deepgram's smart formatter inserted commas and semicolons between individual digits (`"9, 8, 2, 0, 1"`).
+  3. When the AI or caller repeated the number back, the TTS engine paused after every comma/semicolon, creating an awkward, robotic recitation.
+  4. Phone numbers saved to PostgreSQL or sent via Twilio SMS failed or had invalid formats if commas/dashes were present.
+- **Service Awareness Deficit**:
+  1. Assistants lacked dynamic knowledge of the tenant's actual service catalog in their live context.
+  2. When callers asked what services were available or when the assistant asked which service they wanted, the assistant gave generic responses rather than listing the business's actual services.
+
+#### 3. Technical Changes Made
+- **Digit Sanitization & Audio Flow ([src/server/mediaStream/handler.ts](file:///d:/be%20project/calling/campusconnect-ai-assistant/src/server/mediaStream/handler.ts))**:
+  - Implemented `sanitizeDigitSpeech(text)` to strip commas, semicolons, hyphens, and periods between or adjacent to digits (`([0-9०-९])\s*[,;\-–—]\s*(?=[0-9०-९])`).
+  - Pre-sanitized all incoming STT chunks and caller text before passing to the LLM.
+  - Sanitized sentence buffers before boundary extraction so digit sequences are never broken mid-number.
+  - Sanitized TTS text strings so speech synthesis speaks digits fluently in natural groupings.
+- **Caller Number Confirmation Policy ([src/server/services/aiKeyPool.ts](file:///d:/be%20project/calling/campusconnect-ai-assistant/src/server/services/aiKeyPool.ts) & [src/server/actions/registry.ts](file:///d:/be%20project/calling/campusconnect-ai-assistant/src/server/actions/registry.ts))**:
+  - Injected caller number context: `[CURRENT CALLER PHONE: +91...]`.
+  - Added instruction: Instead of asking callers to recite 10 digits, the agent asks: *"क्या मैं इसे आपके इसी कॉलिंग नंबर पर कन्फ़र्म कर दूँ?"* / *"Should I confirm with your current calling number?"*.
+  - Updated `book_appointment` action description to default to the caller's active phone number without demanding manual dictation.
+  - Normalized phone numbers in `bookAppointment.ts` (`phone.replace(/[^0-9+]/g, '')`).
+- **Dynamic Services Injection ([src/server/mediaStream/handler.ts](file:///d:/be%20project/calling/campusconnect-ai-assistant/src/server/mediaStream/handler.ts) & [src/lib/domainPacks.ts](file:///d:/be%20project/calling/campusconnect-ai-assistant/src/lib/domainPacks.ts))**:
+  - During call initialization, loaded active services from Supabase `services` table and injected them into the prompt.
+  - Populated starter salon services for the Lakme Salon assistant (Haircut & Styling, Hair Spa, Facial Treatment, Bridal Makeup, Manicure & Pedicure).
+  - Explicitly instructed the assistant: When asking the caller which service they need, ALWAYS state the available services.
+- **Verification via Automated Test Suite ([scripts/test-booking-flow.ts](file:///d:/be%20project/calling/campusconnect-ai-assistant/scripts/test-booking-flow.ts))**:
+  - Unit tests verified digit extraction and sanitization without punctuation leakage.
+  - End-to-end multi-turn conversation verified:
+    1. Turn 1: Caller asked about services -> AI accurately listed available salon services.
+    2. Turn 2: Caller asked for a slot -> AI checked availability and offered open slots.
+    3. Turn 3: Caller confirmed on current number -> AI invoked `book_appointment` with clean E.164 phone number and confirmed the booking.
+    4. Database query confirmed appointment record created in Supabase with `status: "confirmed"`.
