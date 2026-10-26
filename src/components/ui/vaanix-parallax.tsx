@@ -281,7 +281,7 @@ export function VaanixParallax() {
     (ready ? 'opacity-100' : 'opacity-0');
 
   return (
-    <section ref={sectionRef} className="relative h-[480vh] bg-[#0B1020]">
+    <section ref={sectionRef} className="relative h-[380vh] md:h-[480vh] bg-[#0B1020]">
       <div className="sticky top-0 h-screen w-full overflow-hidden bg-[#0B1020]">
         
         {/* Unified 3D office environment: base canvas + dust canvas + foreground desks */}
@@ -303,33 +303,33 @@ export function VaanixParallax() {
         <div className="pointer-events-none absolute inset-0 z-[22] bg-gradient-to-b from-[#0B1020]/70 via-transparent to-[#0B1020]/50" />
 
         {/* High-tech glow behind the orb - strictly hidden at start */}
-        <div className="pointer-events-none absolute inset-0 z-[25] flex items-center justify-center pb-[6vh]">
+        <div className="pointer-events-none absolute inset-0 z-[25] flex items-center justify-center pb-[4vh] md:pb-[6vh]">
           <div 
             ref={glowRef} 
-            className="opacity-0 h-[45vmin] w-[45vmin] max-w-[420px] max-h-[420px] rounded-full bg-[radial-gradient(circle,rgba(124,92,255,0.45),rgba(34,211,238,0.2)_45%,transparent_70%)] blur-2xl will-change-[opacity,transform]" 
+            className="opacity-0 h-[55vmin] w-[55vmin] md:h-[45vmin] md:w-[45vmin] max-w-[420px] max-h-[420px] rounded-full bg-[radial-gradient(circle,rgba(124,92,255,0.45),rgba(34,211,238,0.2)_45%,transparent_70%)] blur-2xl will-change-[opacity,transform]" 
           />
         </div>
 
         {/* AI core (orb + logo + threads) - scaled to professional, refined hero dimensions */}
-        <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center pb-[6vh]">
+        <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center pb-[4vh] md:pb-[6vh]">
           <div ref={coreRef} className="opacity-0 will-change-[opacity,transform]">
             <div ref={floatRef}>
               <img
                 src={SRC.core}
                 alt="Vaanix AI connected to every call"
                 draggable={false}
-                className="h-auto w-[min(52vw,440px)] md:w-[min(44vw,460px)] select-none drop-shadow-[0_0_40px_rgba(34,211,238,0.35)]"
+                className="h-auto w-[min(72vw,400px)] md:w-[min(44vw,460px)] select-none drop-shadow-[0_0_40px_rgba(34,211,238,0.35)]"
               />
             </div>
           </div>
         </div>
 
         {/* Intro headline */}
-        <div ref={introRef} className="pointer-events-none absolute inset-x-0 top-[12vh] z-50 px-6 text-center">
-          <h2 className="text-4xl font-semibold tracking-tight text-white md:text-6xl">
+        <div ref={introRef} className="pointer-events-none absolute inset-x-0 top-[9vh] md:top-[12vh] z-50 px-4 md:px-6 text-center">
+          <h2 className="text-3xl sm:text-4xl md:text-6xl font-semibold tracking-tight text-white leading-tight">
             Hundreds of calls. <span className="bg-gradient-to-r from-[#7C5CFF] to-[#22D3EE] bg-clip-text text-transparent">Dozens of people.</span>
           </h2>
-          <p className="mx-auto mt-4 max-w-xl text-base text-white/70 md:text-lg">
+          <p className="mx-auto mt-3 md:mt-4 max-w-xl text-sm sm:text-base md:text-lg text-white/70">
             Every missed call is a lost customer.
           </p>
         </div>
@@ -341,18 +341,18 @@ export function VaanixParallax() {
             const el = document.getElementById('features');
             if (el) el.scrollIntoView({ behavior: 'smooth' });
           }}
-          className="cursor-pointer pointer-events-auto absolute inset-x-0 bottom-8 z-50 flex flex-col items-center gap-1 text-xs uppercase tracking-[0.3em] text-white/60 hover:text-white transition-colors"
+          className="cursor-pointer pointer-events-auto absolute inset-x-0 bottom-6 md:bottom-8 z-50 flex flex-col items-center gap-1 text-[10px] md:text-xs uppercase tracking-[0.3em] text-white/60 hover:text-white transition-colors"
         >
           Scroll
-          <ChevronDown className="h-5 w-5 animate-bounce" />
+          <ChevronDown className="h-4 w-4 md:h-5 md:w-5 animate-bounce" />
         </div>
 
         {/* Outro headline */}
-        <div ref={outroRef} className="pointer-events-none absolute inset-x-0 top-[10vh] z-50 px-6 text-center opacity-0 will-change-[opacity,transform]">
-          <h2 className="text-4xl font-semibold tracking-tight text-white md:text-6xl">
+        <div ref={outroRef} className="pointer-events-none absolute inset-x-0 top-[8vh] md:top-[10vh] z-50 px-4 md:px-6 text-center opacity-0 will-change-[opacity,transform]">
+          <h2 className="text-3xl sm:text-4xl md:text-6xl font-semibold tracking-tight text-white leading-tight">
             One AI. <span className="bg-gradient-to-r from-[#7C5CFF] to-[#22D3EE] bg-clip-text text-transparent">Every call.</span>
           </h2>
-          <p className="mx-auto mt-4 max-w-xl text-base text-white/70 md:text-lg">
+          <p className="mx-auto mt-3 md:mt-4 max-w-xl text-sm sm:text-base md:text-lg text-white/70">
             Vaanix answers, qualifies and resolves every call in any language, 24/7.
           </p>
         </div>
